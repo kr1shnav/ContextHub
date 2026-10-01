@@ -13,8 +13,13 @@ from .scanner import scan_repository
 from .graph import build_code_graph
 from .storage import index_repository, IndexDatabase
 from .retrieval import RetrievalEngine, RetrievalQuery
+from .analysis import analyze_task
+from .providers import get_provider
+from .providers.config import ProviderSettings
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
+provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
+app.add_typer(provider_app)
 console = Console()
 
 
@@ -198,6 +203,32 @@ def search(query: Annotated[str, typer.Argument(help="Task or search query.")],
         console.print(f"   Estimated tokens: {result.estimated_tokens}")
         if explain:
             console.print("   Score breakdown: " + ", ".join(result.signals))
+
+
+@provider_app.command("status")
+def provider_status() -> None:
+    """Show local provider configuration without making a network request."""
+    settings = ProviderSettings.from_env()
+    console.print(f"Provider: {settings.provider.title()}")
+    console.print(f"Model: {settings.model}")
+    console.print(f"API key: {'configured' if settings.api_key else 'missing'}")
+    console.print(f"Endpoint: {settings.base_url}")
+
+
+@app.command()
+def analyze(task: Annotated[str, typer.Argument(help="Developer task to analyze.")],
+            limit: Annotated[int, typer.Option("--limit", min=1, max=50)] = 10,
+            json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Analyze a developer task with repository metadata and the configured provider."""
+    try:
+        result = analyze_task(task, get_provider(), Path.cwd(), limit=limit)
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(result.model_dump_json(indent=2)); return
+    console.print("Task Analysis")
+    console.print(f"Type: {result.task_type}\nDomains: {', '.join(result.domains) or 'none'}\nKeywords: {', '.join(result.keywords) or 'none'}\nLikely Files: {', '.join(result.likely_files) or 'none'}\nLikely Symbols: {', '.join(result.likely_symbols) or 'none'}\nRequired Context: {', '.join(result.required_context) or 'none'}\nAmbiguities: {', '.join(result.ambiguities) or 'none'}\nConfidence: {result.confidence:.2f}\nReasoning: {result.reasoning}")
 
 
 if __name__ == "__main__":

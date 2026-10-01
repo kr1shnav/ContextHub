@@ -34,7 +34,21 @@ Developer Task → Query Normalization → Repository Retrieval
       → Future Context Packet → AI Coding Agent
 ```
 
-Task planning, context packets, and model-assisted orchestration are planned for later phases.
+Task planning beyond focused task analysis, context packets, and model-assisted orchestration are planned for later phases.
+
+## AI reasoning
+
+Phase 6 adds a provider-agnostic reasoning layer and `ctx analyze`. It uses existing deterministic hybrid-retrieval metadata as bounded input; it does not replace indexing, graph construction, or retrieval.
+
+The implemented Nebius provider uses the OpenAI-compatible Token Factory API with default model `nvidia/nemotron-3-super-120b-a12b`. Configure `NEBIUS_API_KEY`, optionally `NEBIUS_MODEL` and `NEBIUS_BASE_URL`, then run:
+
+```bash
+ctx analyze "Fix authentication timeout bug"
+ctx analyze "Fix authentication timeout bug" --json
+ctx provider status
+```
+
+The response is validated structured task analysis. `MockProvider` supports deterministic local tests. Full agent functionality, Context Orchestrator, MCP, autonomous coding, and production-scale deployment remain planned.
 
 ## Why it is different
 
@@ -175,14 +189,14 @@ Tests use temporary repositories and databases and do not require network access
 ## Roadmap
 
 - ✅ Phases 1–5: Foundation, Repository Intelligence, Code Graph, Persistent Index, Hybrid Retrieval
-- Planned: Phase 6 Nebius + NVIDIA Nemotron
+- Complete: Phase 6 Nebius + NVIDIA Nemotron task analysis
 - Planned: Phase 7 Context Orchestrator
 - Planned: Phase 8 MCP / Agent Integration
 - Planned: Phase 9 Developer Experience / Demo
 
 ## Hackathon direction
 
-Context Hub is being developed for the Coding and Agentic Engineering track of the Nebius × NVIDIA Global AI Hackathon. The planned Phase 6 integration will use Nebius Token Factory and NVIDIA Nemotron for task analysis and context orchestration. That integration is not yet implemented; the current core is deterministic and provider-independent.
+Context Hub is being developed for the Coding and Agentic Engineering track of the Nebius × NVIDIA Global AI Hackathon. Phase 6 integrates Nebius Token Factory and NVIDIA Nemotron for bounded task analysis while the repository core remains deterministic and provider-independent.
 
 ## Contributing
 
