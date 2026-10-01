@@ -12,6 +12,7 @@ from .project import init_project, project_status
 from .scanner import scan_repository
 from .graph import build_code_graph
 from .storage import index_repository, IndexDatabase
+from .retrieval import RetrievalEngine, RetrievalQuery
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 console = Console()
@@ -169,6 +170,34 @@ def dependents(path: Annotated[Path, typer.Argument(help="Repository-relative fi
     for source in sorted(graph.dependents(node)):
         item = graph.get_node(source)
         console.print(f"  ← {item.path if item and item.path else source}")
+
+
+@app.command("search")
+def search(query: Annotated[str, typer.Argument(help="Task or search query.")],
+           limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+           path: Annotated[str | None, typer.Option("--path", help="Restrict results to a path prefix.")] = None,
+           explain: Annotated[bool, typer.Option("--explain", help="Show score explanations.")] = False) -> None:
+    """Search indexed repository context using lexical and graph signals."""
+    database_path = Path.cwd() / ".context-hub" / "index.db"
+    if not database_path.is_file():
+        console.print("No Context Hub index found. Run `ctx index` first.")
+        raise typer.Exit(code=1)
+    results = RetrievalEngine(database_path).search(RetrievalQuery(task=query, max_results=limit))
+    if path:
+        results = [result for result in results if result.path.startswith(path)]
+    console.print("Context Hub Search")
+    console.print(f"Query: {query}\n")
+    if not results:
+        console.print("No relevant indexed context found.")
+        return
+    for position, result in enumerate(results, 1):
+        console.print(f"{position}. {result.path}" + (f" :: {result.symbol}" if result.symbol else ""))
+        console.print(f"   Score: {result.score:.2f}")
+        console.print(f"   Signals: {', '.join(result.signals)}")
+        console.print(f"   Reason: {'; '.join(result.reasons)}")
+        console.print(f"   Estimated tokens: {result.estimated_tokens}")
+        if explain:
+            console.print("   Score breakdown: " + ", ".join(result.signals))
 
 
 if __name__ == "__main__":
