@@ -10,6 +10,7 @@ from rich.table import Table
 from . import __version__
 from .project import init_project, project_status
 from .scanner import scan_repository
+from .graph import build_code_graph
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 console = Console()
@@ -99,6 +100,20 @@ def symbols(path: Annotated[Path, typer.Argument(help="Repository-relative file 
     for symbol in item.parsed.symbols:
         parent = f" ({symbol.parent})" if symbol.parent else ""
         console.print(f"{symbol.kind.value:<10} {symbol.name}{parent}  lines {symbol.start_line}-{symbol.end_line}")
+
+
+@app.command("graph")
+def graph_command(path: Annotated[Path, typer.Argument(help="Repository directory.")] = Path(".")) -> None:
+    """Build and summarize the repository code graph."""
+    repository = scan_repository(path)
+    graph = build_code_graph(repository)
+    counts: dict[str, int] = {}
+    for edge in graph.edges:
+        counts[edge.kind] = counts.get(edge.kind, 0) + 1
+    console.print(f"Nodes: {len(graph.nodes)}")
+    console.print(f"Edges: {len(graph.edges)}")
+    for kind, count in sorted(counts.items()):
+        console.print(f"  {kind}: {count}")
 
 
 if __name__ == "__main__":
