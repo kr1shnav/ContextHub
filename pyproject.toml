@@ -1,0 +1,24 @@
+[project]
+name = "context-hub"
+version = "0.1.0"
+description = "Context orchestration infrastructure for coding agents."
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.7,<3",
+  "rich>=13.7,<15",
+  "typer>=0.12,<1",
+]
+
+[project.scripts]
+ctx = "context_hub.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/context_hub"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
