@@ -11,6 +11,7 @@ from . import __version__
 from .project import init_project, project_status
 from .scanner import scan_repository
 from .graph import build_code_graph
+from .storage import index_repository, IndexDatabase
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 console = Console()
@@ -46,6 +47,28 @@ def status(path: Annotated[Path, typer.Argument(help="Project directory.")] = Pa
     for key in ("project_root", "git_root", "context_hub_version", "initialized_at"):
         table.add_row(key, str(data.get(key) or "not detected"))
     console.print(table)
+    index = IndexDatabase(path.resolve() / ".context-hub" / "index.db")
+    try:
+        index.open()
+        index_data = index.status(path.resolve())
+    finally:
+        index.close()
+    if index_data:
+        console.print(f"Index: initialized | Files: {index_data['files']} | Symbols: {index_data['symbols']} | Imports: {index_data['imports']}")
+        console.print(f"Last indexed: {index_data['last_indexed'] or 'never'}")
+    else:
+        console.print("Index: not initialized")
+
+
+@app.command()
+def index(path: Annotated[Path, typer.Argument(help="Project directory.")] = Path("."),
+          force: Annotated[bool, typer.Option("--force", help="Reparse all discovered files.")] = False) -> None:
+    """Create or incrementally update the local SQLite repository index."""
+    result = index_repository(path, force=force)
+    console.print("Context Hub Index")
+    for label in ("scanned", "new", "modified", "deleted", "unchanged", "parsed"):
+        console.print(f"{label.title()}: {getattr(result, label)}")
+    console.print("[green]Index updated successfully.[/green]")
 
 
 @app.command()

@@ -5,4 +5,7 @@ __pycache__/
 .pytest_cache/
 dist/
 build/
+.context-hub/*.db
+.context-hub/*.sqlite
+.context-hub/*.sqlite3
 
