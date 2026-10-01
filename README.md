@@ -34,7 +34,7 @@ Developer Task → Query Normalization → Repository Retrieval
       → Future Context Packet → AI Coding Agent
 ```
 
-Task planning beyond focused task analysis, context packets, and model-assisted orchestration are planned for later phases.
+Task planning beyond focused task analysis and model-assisted coding remain planned for later phases.
 
 ## AI reasoning
 
@@ -48,7 +48,16 @@ ctx analyze "Fix authentication timeout bug" --json
 ctx provider status
 ```
 
-The response is validated structured task analysis. `MockProvider` supports deterministic local tests. Full agent functionality, Context Orchestrator, MCP, autonomous coding, and production-scale deployment remain planned.
+The response is validated structured task analysis. `MockProvider` supports deterministic local tests. Full agent functionality, MCP, autonomous coding, and production-scale deployment remain planned.
+
+### Context Orchestrator
+
+Phase 7 adds `ctx pack`, which coordinates task analysis, multiple deterministic retrieval queries, bounded graph expansion, evidence ranking, safe source loading, and context budgeting into a `ContextPacket`. Nemotron may refine priorities using only supplied evidence; provider failure falls back to deterministic retrieval and graph evidence.
+
+```bash
+ctx pack "Fix authentication timeout bug" --max-files 7 --max-tokens 4000
+ctx pack "Fix authentication timeout bug" --json
+```
 
 ## Why it is different
 
@@ -190,7 +199,7 @@ Tests use temporary repositories and databases and do not require network access
 
 - ✅ Phases 1–5: Foundation, Repository Intelligence, Code Graph, Persistent Index, Hybrid Retrieval
 - Complete: Phase 6 Nebius + NVIDIA Nemotron task analysis
-- Planned: Phase 7 Context Orchestrator
+- Complete: Phase 7 Context Orchestrator
 - Planned: Phase 8 MCP / Agent Integration
 - Planned: Phase 9 Developer Experience / Demo
 

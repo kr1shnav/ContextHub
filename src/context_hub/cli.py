@@ -16,6 +16,7 @@ from .retrieval import RetrievalEngine, RetrievalQuery
 from .analysis import analyze_task
 from .providers import get_provider
 from .providers.config import ProviderSettings
+from .orchestration import ContextBudget, ContextOrchestrator
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -229,6 +230,25 @@ def analyze(task: Annotated[str, typer.Argument(help="Developer task to analyze.
         console.print(result.model_dump_json(indent=2)); return
     console.print("Task Analysis")
     console.print(f"Type: {result.task_type}\nDomains: {', '.join(result.domains) or 'none'}\nKeywords: {', '.join(result.keywords) or 'none'}\nLikely Files: {', '.join(result.likely_files) or 'none'}\nLikely Symbols: {', '.join(result.likely_symbols) or 'none'}\nRequired Context: {', '.join(result.required_context) or 'none'}\nAmbiguities: {', '.join(result.ambiguities) or 'none'}\nConfidence: {result.confidence:.2f}\nReasoning: {result.reasoning}")
+
+
+@app.command("pack")
+def pack(task: Annotated[str, typer.Argument(help="Developer task for context assembly.")],
+         max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
+         max_tokens: Annotated[int, typer.Option("--max-tokens", min=100)] = 6000,
+         json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Assemble a bounded, evidence-backed context packet."""
+    try:
+        packet = ContextOrchestrator(Path.cwd(), get_provider(), budget=ContextBudget(max_files=max_files, max_tokens=max_tokens)).build(task)
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(packet.model_dump_json(indent=2)); return
+    console.print("Context Packet")
+    console.print(f"Task: {packet.task}\nFiles: {packet.statistics.files_selected}\nEstimated tokens: {packet.statistics.estimated_tokens}")
+    for item in packet.files:
+        console.print(f"  {item.path} ({item.score:.2f}) — {item.reason}")
 
 
 if __name__ == "__main__":

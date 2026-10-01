@@ -34,6 +34,7 @@ def index_repository(root: Path, *, force: bool = False, database_path: Path | N
                 (str(root), root.name, now, now, 1))
             repo_id = cursor.lastrowid
             existing: dict[str, sqlite3.Row] = {}
+            connection.commit()
         else:
             repo_id = repo["id"]
             existing = {row["relative_path"]: row for row in connection.execute("SELECT * FROM files WHERE repository_id=?", (repo_id,))}
