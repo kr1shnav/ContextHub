@@ -110,10 +110,42 @@ def graph_command(path: Annotated[Path, typer.Argument(help="Repository director
     counts: dict[str, int] = {}
     for edge in graph.edges:
         counts[edge.kind] = counts.get(edge.kind, 0) + 1
-    console.print(f"Nodes: {len(graph.nodes)}")
-    console.print(f"Edges: {len(graph.edges)}")
-    for kind, count in sorted(counts.items()):
-        console.print(f"  {kind}: {count}")
+    console.print("Context Hub Code Graph")
+    for key, value in graph.stats().items():
+        console.print(f"{key.replace('_', ' ').title()}: {value}")
+
+
+def _graph_for_current_repo() -> tuple[object, Path]:
+    root = Path.cwd()
+    return build_code_graph(scan_repository(root)), root
+
+
+@app.command()
+def deps(path: Annotated[Path, typer.Argument(help="Repository-relative file path.")]) -> None:
+    """Show direct dependencies of a file."""
+    graph, _ = _graph_for_current_repo()
+    node = f"file:{path.as_posix()}"
+    if graph.get_node(node) is None:
+        console.print(f"File not found or ignored: {path}")
+        raise typer.Exit(code=1)
+    console.print(f"Dependencies for {path}")
+    for target in sorted(graph.get_dependencies(node)):
+        item = graph.get_node(target)
+        console.print(f"  → {item.path if item and item.path else item.name if item else target}")
+
+
+@app.command()
+def dependents(path: Annotated[Path, typer.Argument(help="Repository-relative file path.")]) -> None:
+    """Show files that depend on a file."""
+    graph, _ = _graph_for_current_repo()
+    node = f"file:{path.as_posix()}"
+    if graph.get_node(node) is None:
+        console.print(f"File not found or ignored: {path}")
+        raise typer.Exit(code=1)
+    console.print(f"Dependents of {path}")
+    for source in sorted(graph.dependents(node)):
+        item = graph.get_node(source)
+        console.print(f"  ← {item.path if item and item.path else source}")
 
 
 if __name__ == "__main__":
