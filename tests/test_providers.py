@@ -74,6 +74,14 @@ def test_task_analysis_accepts_fenced_and_surrounded_json(tmp_path: Path):
     assert result.task_type == "explanation"
 
 
+def test_task_analysis_accepts_null_optional_lists(tmp_path: Path):
+    class Provider:
+        def generate(self, request):
+            return GenerationResponse(text='{"task_type":"task","domains":null,"confidence":0.5,"reasoning":"valid"}', model="test", provider="test")
+
+    assert analyze_task("Explain this", Provider(), tmp_path).domains == []
+
+
 def test_task_analysis_retries_malformed_output_once(tmp_path: Path):
     class Provider:
         calls = 0

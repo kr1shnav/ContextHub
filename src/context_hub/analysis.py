@@ -24,11 +24,22 @@ def analyze_task(task: str, provider: LLMProvider, root: Path, settings: Provide
         try:
             response = provider.generate(request)
             data = _parse_task_analysis_json(response.text)
+            _normalize_optional_fields(data)
             data["task"] = task
             return TaskAnalysis.model_validate(data)
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
             last_error = exc
+    if isinstance(last_error, ValidationError):
+        fields = ", ".join(".".join(str(part) for part in error["loc"]) for error in last_error.errors())
+        raise ProviderError(f"The model returned malformed task analysis JSON (invalid fields: {fields}).") from last_error
     raise ProviderError("The model returned malformed task analysis JSON.") from last_error
+
+
+def _normalize_optional_fields(data: dict[str, object]) -> None:
+    """Accept null for optional list fields without inventing missing required data."""
+    for field in ("domains", "keywords", "likely_files", "likely_symbols", "required_context", "ambiguities", "constraints"):
+        if data.get(field) is None:
+            data[field] = []
 
 
 def _parse_task_analysis_json(text: str) -> dict[str, object]:
