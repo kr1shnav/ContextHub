@@ -31,12 +31,12 @@ class ContextOrchestrator:
         results = _merge_results(self.root, queries, limit)
         plan = _make_plan(task, analysis, results, indexed_paths, self.budget)
         graph_items = _expand(graph, plan.candidate_paths, plan.graph_hops, plan.include_dependencies, plan.include_dependents)
-        evidence = _evidence(results, graph_items, self.root, indexed_paths)
+        evidence = _evidence(results, graph_items, self.root, indexed_paths, priority_paths=analysis.likely_files)
         reasoning = self._reason(evidence, analysis)
         if reasoning:
             evidence = _apply_reasoning(evidence, reasoning, indexed_paths)
         selected = _budget(evidence, self.budget)
-        return _packet(task, analysis, plan, selected, len(repository.files), len(graph.node_data), self.root, graph_items)
+        return _packet(task, analysis, plan, selected, len(repository.files), len(graph.node_data), self.root, graph_items, self.budget)
 
     def _reason(self, evidence: list[ContextEvidence], analysis: TaskAnalysis) -> dict[str, object] | None:
         supplied = [e.model_dump(exclude={"content"}) for e in evidence[:20]]
@@ -93,9 +93,23 @@ def _expand(graph: CodeGraph, paths, hops, deps, dependents):
     return found
 
 
-def _evidence(results, graph_items, root, paths):
+def _evidence(results, graph_items, root, paths, priority_paths=()):
     evidence = [ContextEvidence(id=r.item_id, path=r.path, symbol=r.symbol, source="retrieval", score=min(1, r.score), reason="; ".join(r.reasons) or "retrieval match", estimated_tokens=r.estimated_tokens, metadata=r.metadata) for r in results if r.path in paths]
     seen = {(e.path, e.symbol) for e in evidence}
+    priorities = set(priority_paths)
+    for item in evidence:
+        if item.path in priorities:
+            item.score = min(1, item.score + 0.25)
+            item.reason += "; explicit task-analysis candidate"
+    for path in sorted(priorities - {e.path for e in evidence}):
+        if path not in paths:
+            continue
+        file_path = (root / path).resolve()
+        if not file_path.is_file() or not file_path.is_relative_to(root):
+            continue
+        size = file_path.stat().st_size
+        evidence.append(ContextEvidence(id=f"analysis:{path}", path=path, source="analysis", score=0.9, reason="Explicit task-analysis candidate", estimated_tokens=max(1, size // 4), metadata={"candidate": True}))
+        seen.add((path, None))
     for path, edge, distance, source in graph_items:
         key = (path, None)
         if key not in seen:
@@ -125,8 +139,9 @@ def _budget(evidence, budget):
     return selected
 
 
-def _packet(task, analysis, plan, evidence, considered, graph_count, root, graph_items):
+def _packet(task, analysis, plan, evidence, considered, graph_count, root, graph_items, budget):
     safe=[]; selected_paths=set()
+    actual_tokens = 0
     for item in evidence:
         if item.path in selected_paths: continue
         path = (root / item.path).resolve()
@@ -134,9 +149,14 @@ def _packet(task, analysis, plan, evidence, considered, graph_count, root, graph
         if path.is_file():
             item.content = path.read_text(encoding="utf-8", errors="replace")
             item.estimated_tokens = max(1, len(item.content) // 4)
+            if item.path not in selected_paths and len(selected_paths) >= budget.max_files:
+                continue
+            if actual_tokens + item.estimated_tokens > budget.max_tokens:
+                continue
             safe.append(item)
             selected_paths.add(item.path)
+            actual_tokens += item.estimated_tokens
     sections = [f"# Task\n\n{task}", "# Relevant Files"]
     for item in safe: sections.append(f"## {item.path}\n\nReason: {item.reason}\n\n```\n{item.content}\n```")
-    stats = ContextStatistics(files_considered=considered, files_selected=len({e.path for e in safe}), graph_nodes_considered=graph_count, graph_nodes_selected=len(graph_items), estimated_tokens=sum(e.estimated_tokens for e in safe))
+    stats = ContextStatistics(files_considered=considered, files_selected=len({e.path for e in safe}), graph_nodes_considered=graph_count, graph_nodes_selected=len({e.path for e in safe if e.source == "graph"}), estimated_tokens=sum(e.estimated_tokens for e in safe))
     return ContextPacket(task=task, task_analysis=analysis, context_plan=plan, files=safe, graph_evidence=[e for e in safe if e.source == "graph"], constraints=analysis.constraints, assembled_context="\n\n".join(sections), statistics=stats)
