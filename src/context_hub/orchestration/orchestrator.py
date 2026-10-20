@@ -34,7 +34,7 @@ class ContextOrchestrator:
         evidence = _evidence(results, graph_items, self.root, indexed_paths, priority_paths=analysis.likely_files)
         reasoning = self._reason(evidence, analysis)
         if reasoning:
-            evidence = _apply_reasoning(evidence, reasoning, indexed_paths)
+            evidence = _apply_reasoning(evidence, reasoning, indexed_paths, priority_paths=analysis.likely_files)
         selected = _budget(evidence, self.budget)
         return _packet(task, analysis, plan, selected, len(repository.files), len(graph.node_data), self.root, graph_items, self.budget)
 
@@ -117,11 +117,11 @@ def _evidence(results, graph_items, root, paths, priority_paths=()):
     return sorted(evidence, key=lambda e: (0 if e.path in priorities else 1, -e.score, e.path, e.symbol or ""))
 
 
-def _apply_reasoning(evidence, reasoning, paths):
-    priorities = set(reasoning.get("priority_paths", []))
+def _apply_reasoning(evidence, reasoning, paths, priority_paths=()):
+    priorities = set(priority_paths) | set(reasoning.get("priority_paths", []))
     for item in evidence:
         if item.path in priorities: item.score = min(1, item.score + 0.1); item.reason += "; Nemotron priority"
-    return sorted(evidence, key=lambda e: (-e.score, e.path, e.symbol or ""))
+    return sorted(evidence, key=lambda e: (0 if e.path in priorities else 1, -e.score, e.path, e.symbol or ""))
 
 
 def _budget(evidence, budget):
