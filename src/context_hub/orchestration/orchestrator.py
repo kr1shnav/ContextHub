@@ -114,7 +114,7 @@ def _evidence(results, graph_items, root, paths, priority_paths=()):
         key = (path, None)
         if key not in seen:
             evidence.append(ContextEvidence(id=f"graph:{source}:{path}:{distance}", path=path, source="graph", score=max(0.1, 0.7 - distance * 0.15), reason=f"{edge} related to {source}", distance=distance, metadata={"edge": str(edge)})); seen.add(key)
-    return sorted(evidence, key=lambda e: (-e.score, e.path, e.symbol or ""))
+    return sorted(evidence, key=lambda e: (0 if e.path in priorities else 1, -e.score, e.path, e.symbol or ""))
 
 
 def _apply_reasoning(evidence, reasoning, paths):

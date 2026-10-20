@@ -13,6 +13,13 @@ def test_explicit_candidate_path_is_materialized_and_prioritized(tmp_path: Path)
     assert result[0].source == "analysis"
 
 
+def test_explicit_candidate_precedes_higher_scoring_non_candidate(tmp_path: Path):
+    (tmp_path / "orchestrator.py").write_text("class ContextOrchestrator: pass\n")
+    (tmp_path / "models.py").write_text("class ContextPacket: pass\n")
+    result = _evidence([RetrievalResult(item_id="models", path="models.py", score=1, reason="symbol", estimated_tokens=10)], [], tmp_path, {"orchestrator.py", "models.py"}, priority_paths=["orchestrator.py"])
+    assert [item.path for item in result] == ["orchestrator.py", "models.py"]
+
+
 def test_evidence_deduplication_and_graph_counts_use_unique_paths(tmp_path: Path):
     (tmp_path / "a.py").write_text("x\n")
     result = _evidence([], [("a.py", "imports", 1, "root.py"), ("a.py", "imports", 2, "other.py")], tmp_path, {"a.py"})
