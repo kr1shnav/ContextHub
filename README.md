@@ -40,13 +40,15 @@ Task planning beyond focused task analysis and model-assisted coding remain plan
 
 Phase 6 adds a provider-agnostic reasoning layer and `ctx analyze`. It uses existing deterministic hybrid-retrieval metadata as bounded input; it does not replace indexing, graph construction, or retrieval.
 
-The implemented Nebius provider uses the OpenAI-compatible Token Factory API with default model `nvidia/nemotron-3-super-120b-a12b`. Configure `NEBIUS_API_KEY`, optionally `NEBIUS_MODEL` and `NEBIUS_BASE_URL`, then run:
+The implemented providers use OpenAI-compatible chat-completions APIs with default model `nvidia/nemotron-3-super-120b-a12b`. Nebius remains the default provider. Configure Nebius with `NEBIUS_API_KEY` and optionally `NEBIUS_MODEL` and `NEBIUS_BASE_URL`. To use NVIDIA API Catalog, set `CONTEXT_HUB_PROVIDER=nvidia`, `NVIDIA_API_KEY`, and optionally `NVIDIA_MODEL` and `NVIDIA_BASE_URL` (default `https://integrate.api.nvidia.com/v1`). NVIDIA's hosted Nemotron models include `nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-3-nano-30b-a3b`, and `nvidia/nemotron-3.5-lightning-30b-a3b`.
 
 ```bash
 ctx analyze "Fix authentication timeout bug"
 ctx analyze "Fix authentication timeout bug" --json
 ctx provider status
 ```
+
+For deterministic local context generation without an API key, use `ctx pack "..." --no-llm`.
 
 The response is validated structured task analysis. `MockProvider` supports deterministic local tests. Full agent functionality, MCP, autonomous coding, and production-scale deployment remain planned.
 

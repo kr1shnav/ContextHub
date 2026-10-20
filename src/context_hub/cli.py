@@ -14,7 +14,7 @@ from .graph import build_code_graph
 from .storage import index_repository, IndexDatabase
 from .retrieval import RetrievalEngine, RetrievalQuery
 from .analysis import analyze_task
-from .providers import get_provider
+from .providers import MockProvider, get_provider
 from .providers.config import ProviderSettings
 from .orchestration import ContextBudget, ContextOrchestrator
 
@@ -236,10 +236,11 @@ def analyze(task: Annotated[str, typer.Argument(help="Developer task to analyze.
 def pack(task: Annotated[str, typer.Argument(help="Developer task for context assembly.")],
          max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
          max_tokens: Annotated[int, typer.Option("--max-tokens", min=100)] = 6000,
+         no_llm: Annotated[bool, typer.Option("--no-llm", help="Use deterministic local analysis without an API provider.")] = False,
          json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Assemble a bounded, evidence-backed context packet."""
     try:
-        packet = ContextOrchestrator(Path.cwd(), get_provider(), budget=ContextBudget(max_files=max_files, max_tokens=max_tokens)).build(task)
+        packet = ContextOrchestrator(Path.cwd(), MockProvider() if no_llm else get_provider(), budget=ContextBudget(max_files=max_files, max_tokens=max_tokens)).build(task)
     except Exception as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
