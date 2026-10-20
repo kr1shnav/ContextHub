@@ -16,6 +16,13 @@ def test_scan_hashes_and_ignores_secrets(tmp_path: Path):
     assert repo.files[0].content_hash
 
 
+def test_scan_ignores_generated_uv_cache(tmp_path: Path):
+    (tmp_path / "app.py").write_text("def run(): pass\n")
+    (tmp_path / ".uv-cache").mkdir()
+    (tmp_path / ".uv-cache" / "cache.json").write_text("generated")
+    assert [file.path for file in scan_repository(tmp_path).files] == ["app.py"]
+
+
 def test_language_registry():
     assert detect_language(Path("main.py")) == "Python"
     assert detect_language(Path("main.ts")) == "TypeScript"

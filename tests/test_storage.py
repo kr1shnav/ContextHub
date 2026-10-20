@@ -27,3 +27,21 @@ def test_deleted_file_and_schema(tmp_path: Path):
     with IndexDatabase(db_path) as database:
         assert database.connection.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()[0] == "1"
 
+
+def test_reindex_removes_files_that_become_excluded(tmp_path: Path):
+    cached_file = tmp_path / "generated.py"
+    cached_file.write_text("def generated(): pass\n")
+    db_path = tmp_path / "index.db"
+    index_repository(tmp_path, database_path=db_path)
+    cache = tmp_path / ".uv-cache"
+    cache.mkdir()
+    cached_file.replace(cache / "generated.py")
+    with IndexDatabase(db_path) as database:
+        assert database.connection.execute("SELECT COUNT(*) FROM files WHERE relative_path='generated.py'").fetchone()[0] == 1
+
+    result = index_repository(tmp_path, database_path=db_path)
+    assert result.deleted >= 1
+    with IndexDatabase(db_path) as database:
+        assert database.connection.execute("SELECT COUNT(*) FROM files WHERE relative_path='generated.py'").fetchone()[0] == 0
+        assert database.connection.execute("SELECT COUNT(*) FROM files WHERE relative_path='.uv-cache/generated.py'").fetchone()[0] == 0
+

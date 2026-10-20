@@ -10,7 +10,7 @@ from .languages import detect_language
 from .models import Repository, RepositoryFile
 from .parsing import parser_for
 
-DEFAULT_IGNORED = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", "build", "coverage", ".context-hub"}
+DEFAULT_IGNORED = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", "build", "coverage", ".context-hub", ".uv-cache"}
 SECRET_NAMES = {".env", "credentials", "secrets"}
 SECRET_SUFFIXES = {".pem", ".key", ".p12"}
 

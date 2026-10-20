@@ -23,3 +23,17 @@ def test_empty_and_limited_queries(tmp_path: Path):
     assert RetrievalEngine(db).search("the and") == []
     assert len(RetrievalEngine(db).search(RetrievalQuery(task="authentication", max_results=1))) <= 1
 
+
+def test_unmatched_queries_and_zero_score_files_are_excluded(tmp_path: Path):
+    (tmp_path / "authentication.py").write_text("def authenticate(): pass\n")
+    (tmp_path / "unrelated.py").write_text("def other(): pass\n")
+    db = tmp_path / "index.db"
+    index_repository(tmp_path, database_path=db)
+    engine = RetrievalEngine(db)
+
+    results = engine.search(RetrievalQuery(task="authentication", max_results=5))
+    assert results
+    assert all(result.score > 0 and result.signals for result in results)
+    assert any(result.path == "authentication.py" for result in results)
+    assert engine.search("zzznomatch123") == []
+

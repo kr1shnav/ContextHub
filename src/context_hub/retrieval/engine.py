@@ -71,6 +71,6 @@ class RetrievalEngine:
                 candidates[f"file:{source}"].signals.append("dependent_match")
                 candidates[f"file:{source}"].reasons.append(f"Dependent of directly matched file: {target}")
         limit = query.max_results or self.config.max_results
-        return sorted((r for r in candidates.values() if r.score >= self.config.minimum_score),
+        return sorted((r for r in candidates.values() if r.score > 0 and r.signals and r.score >= self.config.minimum_score),
                       key=lambda r: (-r.score, r.path, r.symbol or ""))[:limit]
 

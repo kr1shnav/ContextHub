@@ -1,0 +1,39 @@
+{
+	"nodes":[
+		{"id":"16aac177ea0ef77f","type":"text","text":"Find similar content","x":280,"y":-30,"width":190,"height":60,"color":"4"},
+		{"id":"9a3961400cc8a507","type":"text","text":"Compare vectors","x":60,"y":-30,"width":170,"height":60,"color":"4"},
+		{"id":"1ece0387c023e237","type":"text","text":"QUERY VECTOR","x":-160,"y":-30,"width":170,"height":60,"color":"4"},
+		{"id":"bb9097fb75e2c203","type":"text","text":"Embedding Model","x":-395,"y":-30,"width":180,"height":60,"color":"4"},
+		{"id":"f6aa6b56ff5a7300","type":"text","text":"User Question","x":-620,"y":-30,"width":160,"height":60,"color":"4"},
+		{"id":"ff42a23d09b8a584","type":"text","text":"TEXT","x":-500,"y":-280,"width":105,"height":60,"color":"2"},
+		{"id":"5dda87249f5a79f7","type":"text","text":"Embedding Model","x":-350,"y":-280,"width":190,"height":60,"color":"2"},
+		{"id":"e542aafb2f07eddc","type":"text","text":"VECTOR","x":-100,"y":-280,"width":120,"height":60,"color":"2"},
+		{"id":"66f4f0a86032d1ca","type":"text","text":"Store it","x":80,"y":-280,"width":100,"height":60,"color":"2"},
+		{"id":"430543745d69c8b2","type":"text","text":"GitHub Repository","x":-230,"y":-900,"width":250,"height":60,"color":"5"},
+		{"id":"e07a971ca41b2b54","type":"text","text":"Split into useful chunks","x":-230,"y":-820,"width":250,"height":60,"color":"5"},
+		{"id":"49a940ac8ae7d1b1","type":"text","text":"Ingestion","x":-230,"y":-740,"width":250,"height":60,"color":"5"},
+		{"id":"ce19da87c6fb353d","type":"text","text":"Parse files / PRs / Issues / docs","x":-230,"y":-660,"width":250,"height":60,"color":"5"},
+		{"id":"6aada731230130e5","type":"text","text":"Embedding Model","x":-230,"y":-580,"width":250,"height":60,"color":"5"},
+		{"id":"d00bd9f291ef1df4","type":"text","text":"Vectors","x":-230,"y":-500,"width":250,"height":60,"color":"5"},
+		{"id":"85201e79b2006b77","type":"text","text":"PostgreSQL + pgvector","x":-230,"y":-420,"width":250,"height":60,"color":"5"}
+	],
+	"edges":[
+		{"id":"5a340db982fb595d","fromNode":"ff42a23d09b8a584","fromSide":"right","toNode":"5dda87249f5a79f7","toSide":"left"},
+		{"id":"9c7373f77f973d8b","fromNode":"5dda87249f5a79f7","fromSide":"right","toNode":"e542aafb2f07eddc","toSide":"left"},
+		{"id":"31e90fead0e29c81","fromNode":"e542aafb2f07eddc","fromSide":"right","toNode":"66f4f0a86032d1ca","toSide":"left"},
+		{"id":"876ad57c44ed6531","fromNode":"f6aa6b56ff5a7300","fromSide":"right","toNode":"bb9097fb75e2c203","toSide":"left"},
+		{"id":"48a4952eb88a4367","fromNode":"bb9097fb75e2c203","fromSide":"right","toNode":"1ece0387c023e237","toSide":"left"},
+		{"id":"1765798fab835cac","fromNode":"1ece0387c023e237","fromSide":"right","toNode":"9a3961400cc8a507","toSide":"left"},
+		{"id":"7635340a4a2254ed","fromNode":"9a3961400cc8a507","fromSide":"right","toNode":"16aac177ea0ef77f","toSide":"left"},
+		{"id":"f81aee4cc8e66fe1","fromNode":"16aac177ea0ef77f","fromSide":"right","toNode":"66f4f0a86032d1ca","toSide":"right","color":"1","label":"Compare"},
+		{"id":"ce9f8595dad31586","fromNode":"430543745d69c8b2","fromSide":"bottom","toNode":"e07a971ca41b2b54","toSide":"top"},
+		{"id":"aed43c7915f2c125","fromNode":"e07a971ca41b2b54","fromSide":"bottom","toNode":"49a940ac8ae7d1b1","toSide":"top"},
+		{"id":"9d6594b1ad7ea19b","fromNode":"49a940ac8ae7d1b1","fromSide":"bottom","toNode":"ce19da87c6fb353d","toSide":"top"},
+		{"id":"ff2a3c2df30c7826","fromNode":"ce19da87c6fb353d","fromSide":"bottom","toNode":"6aada731230130e5","toSide":"top"},
+		{"id":"02ca1eba17ae7ab8","fromNode":"6aada731230130e5","fromSide":"bottom","toNode":"d00bd9f291ef1df4","toSide":"top"},
+		{"id":"25cb068de6fb6dac","fromNode":"d00bd9f291ef1df4","fromSide":"bottom","toNode":"85201e79b2006b77","toSide":"top"},
+		{"id":"a01b7121c2559873","fromNode":"85201e79b2006b77","fromSide":"right","toNode":"66f4f0a86032d1ca","toSide":"top","color":"4"},
+		{"id":"3b9f97c34736d46f","fromNode":"bb9097fb75e2c203","fromSide":"top","toNode":"6aada731230130e5","toSide":"left","color":"2"},
+		{"id":"a0500161a7976985","fromNode":"5dda87249f5a79f7","fromSide":"top","toNode":"6aada731230130e5","toSide":"left","color":"2"}
+	]
+}
