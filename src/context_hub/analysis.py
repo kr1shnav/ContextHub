@@ -11,11 +11,11 @@ from .providers.prompts import SYSTEM_PROMPT, analysis_prompt
 from .retrieval import RetrievalEngine, RetrievalQuery
 
 
-def analyze_task(task: str, provider: LLMProvider, root: Path, settings: ProviderSettings | None = None, limit: int = 10) -> TaskAnalysis:
+def analyze_task(task: str, provider: LLMProvider, root: Path, settings: ProviderSettings | None = None, limit: int = 10, *, compact_prompt: bool = False) -> TaskAnalysis:
     settings = settings or ProviderSettings.from_env()
     database = root / ".context-hub" / "index.db"
     results = RetrievalEngine(database).search(RetrievalQuery(task=task, max_results=limit)) if database.is_file() else []
-    user_prompt = analysis_prompt(task, results, settings.max_context_chars)
+    user_prompt = analysis_prompt(task, results, settings.max_context_chars, compact=compact_prompt)
     request = GenerationRequest(system=SYSTEM_PROMPT, user=user_prompt, model=settings.model, temperature=settings.temperature, max_tokens=settings.max_tokens)
     last_error: Exception | None = None
     for attempt in range(2):

@@ -23,7 +23,7 @@ class ContextOrchestrator:
     def build(self, task: str, *, limit: int = 20) -> ContextPacket:
         # Keep the analysis prompt bounded like `ctx analyze`; the larger limit
         # remains available for the subsequent retrieval and graph assembly.
-        analysis = analyze_task(task, self.provider, self.root, self.settings, limit=min(limit, 10))
+        analysis = analyze_task(task, self.provider, self.root, self.settings, limit=min(limit, 10), compact_prompt=True)
         repository = scan_repository(self.root)
         indexed_paths = {item.path for item in repository.files}
         graph = build_code_graph(repository)

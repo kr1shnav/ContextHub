@@ -122,3 +122,4 @@ def test_context_pack_bounds_analysis_prompt_and_assembles_packet(tmp_path: Path
     assert packet.task_analysis.task_type == "explanation"
     assert len(calls) == 2
     assert "Bounded repository retrieval metadata" in calls[0].user
+    assert "Keep the arrays concise" in calls[0].user
