@@ -7,6 +7,7 @@ from context_hub.providers.models import GenerationRequest
 from context_hub.analysis import analyze_task
 from context_hub.providers.models import GenerationResponse
 from pathlib import Path
+from context_hub.orchestration import ContextBudget, ContextOrchestrator
 
 
 def request() -> GenerationRequest:
@@ -104,3 +105,20 @@ def test_task_analysis_rejects_invalid_or_incomplete_output(tmp_path: Path, text
 
     with pytest.raises(ProviderError, match="malformed task analysis JSON"):
         analyze_task("Explain this", Provider(), tmp_path)
+
+
+def test_context_pack_bounds_analysis_prompt_and_assembles_packet(tmp_path: Path):
+    (tmp_path / "orchestrator.py").write_text("class ContextOrchestrator:\n    pass\n")
+    calls = []
+
+    class Provider:
+        def generate(self, request):
+            calls.append(request)
+            if len(calls) == 1:
+                return GenerationResponse(text='{"task_type":"explanation","domains":["orchestration"],"keywords":["context"],"likely_files":["orchestrator.py"],"confidence":0.8,"reasoning":"valid"}', model="test", provider="test")
+            return GenerationResponse(text='{"priority_paths":[],"important_symbols":[],"reasoning":"valid"}', model="test", provider="test")
+
+    packet = ContextOrchestrator(tmp_path, Provider(), budget=ContextBudget(max_files=3, max_tokens=1000)).build("Explain the context packet", limit=20)
+    assert packet.task_analysis.task_type == "explanation"
+    assert len(calls) == 2
+    assert "Bounded repository retrieval metadata" in calls[0].user
