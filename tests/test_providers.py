@@ -4,6 +4,9 @@ import pytest
 from context_hub.providers import NVIDIAProvider, ProviderError, get_provider
 from context_hub.providers.config import ProviderSettings
 from context_hub.providers.models import GenerationRequest
+from context_hub.analysis import analyze_task
+from context_hub.providers.models import GenerationResponse
+from pathlib import Path
 
 
 def request() -> GenerationRequest:
@@ -57,3 +60,39 @@ def test_nvidia_selection_and_missing_key(monkeypatch):
     assert isinstance(get_provider(settings), NVIDIAProvider)
     with pytest.raises(ProviderError, match="NVIDIA_API_KEY"):
         get_provider(settings).generate(request())
+
+
+def test_task_analysis_accepts_fenced_and_surrounded_json(tmp_path: Path):
+    payload = '{"task_type":"explanation","confidence":0.8,"reasoning":"valid"}'
+
+    class Provider:
+        def generate(self, request):
+            return GenerationResponse(text="Here is the result:\n```json\n" + payload + "\n```", model="test", provider="test")
+
+    result = analyze_task("Explain this", Provider(), tmp_path)
+    assert result.task == "Explain this"
+    assert result.task_type == "explanation"
+
+
+def test_task_analysis_retries_malformed_output_once(tmp_path: Path):
+    class Provider:
+        calls = 0
+
+        def generate(self, request):
+            self.calls += 1
+            text = "not json" if self.calls == 1 else '{"task_type":"task","confidence":0.5,"reasoning":"retry"}'
+            return GenerationResponse(text=text, model="test", provider="test")
+
+    provider = Provider()
+    assert analyze_task("Explain this", provider, tmp_path).reasoning == "retry"
+    assert provider.calls == 2
+
+
+@pytest.mark.parametrize("text", ["not json", '{"task_type":"task"}', '{"task_type":"task","confidence":0.5'])
+def test_task_analysis_rejects_invalid_or_incomplete_output(tmp_path: Path, text: str):
+    class Provider:
+        def generate(self, request):
+            return GenerationResponse(text=text, model="test", provider="test")
+
+    with pytest.raises(ProviderError, match="malformed task analysis JSON"):
+        analyze_task("Explain this", Provider(), tmp_path)
