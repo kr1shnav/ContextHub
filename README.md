@@ -188,6 +188,7 @@ provides these read-only tools:
 | `search_context` | `query: string`, `limit: integer` (1–100, default 20) | Search the local indexed repository metadata |
 | `inspect_file` | `path: string` | Return file metadata, symbols, and imports |
 | `get_dependencies` | `path: string` (or a dotted module name) | Return resolved and external dependencies |
+| `build_context_packet` | `task: string`, `max_files: integer` (1–100, default 10), `max_tokens: integer` (100–100000, default 6000) | Assemble bounded provider-assisted context |
 
 Example MCP tool request payloads:
 
@@ -195,10 +196,13 @@ Example MCP tool request payloads:
 {"name":"search_context","arguments":{"query":"authentication","limit":10}}
 {"name":"inspect_file","arguments":{"path":"src/context_hub/cli.py"}}
 {"name":"get_dependencies","arguments":{"path":"src.context_hub.cli"}}
+{"name":"build_context_packet","arguments":{"task":"add MCP tool tests","max_files":5,"max_tokens":3000}}
 ```
 
 Search requires an existing local index (`uv run ctx index`). The inspection
-and dependency tools return metadata only and never include file contents.
+and dependency tools return metadata only. `build_context_packet` uses the
+existing orchestrator and returns only its bounded, repository-relative file
+evidence; it requires the configured provider and local index.
 
 ## Project structure
 

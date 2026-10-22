@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from .graph import build_code_graph
+from .orchestration import ContextBudget, ContextOrchestrator
+from .providers import ProviderError, get_provider
 from .retrieval import RetrievalEngine, RetrievalQuery
 from .scanner import scan_repository
 
@@ -103,6 +105,52 @@ def register_tools(server: Any, root: Path | None = None) -> Any:
                 "resolved": node.type.value != "external",
             })
         return {"path": relative, "dependencies": dependencies}
+
+    @server.tool()
+    def build_context_packet(task: str, max_files: int = 10, max_tokens: int = 6000) -> dict[str, object]:
+        """Assemble bounded repository context for a coding task."""
+        if not isinstance(task, str) or not task.strip():
+            raise ValueError("task must be a non-empty string")
+        if not isinstance(max_files, int) or isinstance(max_files, bool) or not 1 <= max_files <= 100:
+            raise ValueError("max_files must be an integer between 1 and 100")
+        if not isinstance(max_tokens, int) or isinstance(max_tokens, bool) or not 100 <= max_tokens <= 100000:
+            raise ValueError("max_tokens must be an integer between 100 and 100000")
+        database = repository_root / ".context-hub" / "index.db"
+        if not database.is_file():
+            raise ValueError("Context Hub index is unavailable; run `ctx index` first")
+        try:
+            packet = ContextOrchestrator(
+                repository_root,
+                get_provider(),
+                budget=ContextBudget(max_files=max_files, max_tokens=max_tokens),
+            ).build(task)
+        except ProviderError as exc:
+            raise RuntimeError(f"Context provider unavailable: {exc}") from exc
+        except (OSError, RuntimeError) as exc:
+            raise RuntimeError(f"Context packet could not be built: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError("Context packet could not be built due to an unexpected internal error") from exc
+        return {
+            "task": packet.task,
+            "files": [
+                {
+                    "path": item.path,
+                    "symbol": item.symbol,
+                    "source": item.source,
+                    "score": item.score,
+                    "reason": item.reason,
+                    "distance": item.distance,
+                    "estimated_tokens": item.estimated_tokens,
+                    "metadata": item.metadata,
+                    "content": item.content,
+                }
+                for item in packet.files
+            ],
+            "statistics": packet.statistics.model_dump(mode="json"),
+            "constraints": packet.constraints,
+            "selected_paths": [item.path for item in packet.files],
+            "selected_symbols": sorted({item.symbol for item in packet.files if item.symbol}),
+        }
 
     return server
 
