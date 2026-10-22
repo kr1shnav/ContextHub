@@ -188,6 +188,11 @@ stdio configuration formats, environment guidance, and an end-to-end agent
 workflow. The examples are configuration guides and have not been runtime-
 tested against those client installations in this repository.
 
+The Phase 9.1 planning-only agent harness is documented in
+[docs/architecture.md](docs/architecture.md). It is available as the typed
+`context_hub.agent_harness.AgentHarness` Python API; no new CLI or MCP command
+is added in this phase.
+
 | Tool | Arguments | Purpose |
 | --- | --- | --- |
 | `search_context` | `query: string`, `limit: integer` (1–100, default 20) | Search the local indexed repository metadata |
