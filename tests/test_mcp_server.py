@@ -15,6 +15,9 @@ def test_create_server_initializes_fastmcp(monkeypatch):
         def __init__(self, name):
             self.name = name
 
+        def tool(self):
+            return lambda function: function
+
     monkeypatch.setattr("mcp.server.fastmcp.FastMCP", FakeFastMCP)
     assert create_server().name == "Context Hub"
 

@@ -180,9 +180,25 @@ After installing dependencies, launch the local MCP server with:
 uv run ctx mcp serve
 ```
 
-The server uses stdio and currently provides the MCP foundation only; Context
-Hub MCP tools will be added in the next phase. It does not require an API key
-to start.
+The server uses stdio and does not require an API key to start. It currently
+provides these read-only tools:
+
+| Tool | Arguments | Purpose |
+| --- | --- | --- |
+| `search_context` | `query: string`, `limit: integer` (1–100, default 20) | Search the local indexed repository metadata |
+| `inspect_file` | `path: string` | Return file metadata, symbols, and imports |
+| `get_dependencies` | `path: string` (or a dotted module name) | Return resolved and external dependencies |
+
+Example MCP tool request payloads:
+
+```json
+{"name":"search_context","arguments":{"query":"authentication","limit":10}}
+{"name":"inspect_file","arguments":{"path":"src/context_hub/cli.py"}}
+{"name":"get_dependencies","arguments":{"path":"src.context_hub.cli"}}
+```
+
+Search requires an existing local index (`uv run ctx index`). The inspection
+and dependency tools return metadata only and never include file contents.
 
 ## Project structure
 
