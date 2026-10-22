@@ -33,6 +33,20 @@ export NEBIUS_API_KEY="<set-this-outside-the-repository>"
 Do not commit populated environment files or API keys. The provider is not
 needed for `search_context`, `inspect_file`, or `get_dependencies`.
 
+## Security boundaries
+
+The server resolves every requested file against the configured repository
+root. Absolute paths, `..` traversal, and symlinks that resolve outside the
+repository are rejected. Sensitive paths such as `.env*`, credential/secret
+files, and private-key containers (`.key`, `.pem`, `.p12`) are not exposed;
+ordinary source names such as `secrets_manager.py` remain inspectable. Packet
+content also redacts common API-key, token, password, secret, and bearer-value
+assignments before returning them.
+
+Tool failures return safe actionable messages. Diagnostics are written through
+the local Python logger using only the tool name and exception type; secrets
+and environment dumps are not logged by the MCP adapter.
+
 ## VS Code MCP configuration
 
 VS Code documents workspace `.vscode/mcp.json` with a top-level `servers`
@@ -113,3 +127,16 @@ Tool behavior is read-only from the MCP client’s perspective. File paths are
 repository-relative, and the server does not return API keys or unrelated
 files. `search_context` and `build_context_packet` require `uv run ctx index`;
 the inspection and dependency tools scan the repository directly.
+
+## Troubleshooting
+
+- If the server will not start, run `uv sync` and verify `uv run ctx mcp serve`
+  from the target repository.
+- If search or packet building reports an unavailable index, run `uv run ctx
+  init` followed by `uv run ctx index` in that repository.
+- If packet building reports an unavailable provider, set the provider and API
+  key in the environment inherited by the client process. Never put the key
+  in `.vscode/mcp.json`, `.mcp.json`, or version control.
+- If a client reports no tools, restart or refresh its MCP connection and
+  inspect the client’s server output/log view. Client-specific runtime
+  behavior has not been tested by this project.
