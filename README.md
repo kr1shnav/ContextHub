@@ -156,6 +156,7 @@ Scores are bounded relevance scores, not probabilities. Token estimates use a si
 | `ctx index` / `ctx index --force` | Create or update the SQLite index |
 | `ctx search "<query>"` | Search indexed context |
 | `ctx search "<query>" --explain` | Show retrieval explanations |
+| `ctx mcp serve` | Start the local MCP server over stdio |
 
 ## Quick start
 
@@ -170,6 +171,18 @@ uv run ctx search "authentication timeout"
 ```
 
 Example output varies with the indexed repository, but every result includes its path, score, signals, reason, and estimated token size.
+
+### MCP server
+
+After installing dependencies, launch the local MCP server with:
+
+```bash
+uv run ctx mcp serve
+```
+
+The server uses stdio and currently provides the MCP foundation only; Context
+Hub MCP tools will be added in the next phase. It does not require an API key
+to start.
 
 ## Project structure
 

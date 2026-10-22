@@ -17,11 +17,24 @@ from .analysis import analyze_task
 from .providers import MockProvider, get_provider
 from .providers.config import ProviderSettings
 from .orchestration import ContextBudget, ContextOrchestrator
+from .mcp_server import serve_stdio
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
+mcp_app = typer.Typer(name="mcp", help="Model Context Protocol server commands.")
 app.add_typer(provider_app)
+app.add_typer(mcp_app)
 console = Console()
+
+
+@mcp_app.command("serve")
+def mcp_serve() -> None:
+    """Start the Context Hub MCP server over stdio."""
+    try:
+        serve_stdio()
+    except Exception as exc:
+        typer.echo(f"Context Hub MCP server failed to start: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
