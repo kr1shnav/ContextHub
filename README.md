@@ -183,6 +183,11 @@ uv run ctx mcp serve
 The server uses stdio and does not require an API key to start. It currently
 provides these read-only tools:
 
+See [docs/mcp.md](docs/mcp.md) for verified VS Code and Claude Code local
+stdio configuration formats, environment guidance, and an end-to-end agent
+workflow. The examples are configuration guides and have not been runtime-
+tested against those client installations in this repository.
+
 | Tool | Arguments | Purpose |
 | --- | --- | --- |
 | `search_context` | `query: string`, `limit: integer` (1–100, default 20) | Search the local indexed repository metadata |
