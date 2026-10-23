@@ -16,6 +16,7 @@ from .providers import LLMProvider, ProviderError
 from .providers.config import ProviderSettings
 from .providers.models import GenerationRequest
 from .providers.prompts import SYSTEM_PROMPT
+from .tools import ToolCall, ToolExecutor, ToolResult
 
 
 class AgentTask(BaseModel):
@@ -25,6 +26,7 @@ class AgentTask(BaseModel):
     max_iterations: int = Field(default=3, ge=1, le=10)
     max_files: int = Field(default=10, ge=1, le=100)
     max_tokens: int = Field(default=6000, ge=100, le=100000)
+    max_tool_calls: int = Field(default=8, ge=1, le=100)
 
     @field_validator("task")
     @classmethod
@@ -228,6 +230,22 @@ class AgentHarness:
             settings=self.settings,
         ).build(agent_task.task)
         return self._repository_plan(agent_task, packet)
+
+    def execute_read_only_tools(self, task: AgentTask | str, calls: list[ToolCall | dict[str, object]]) -> list[ToolResult]:
+        """Execute caller-supplied allowlisted tools within the task call budget."""
+        agent_task = AgentTask(task=task) if isinstance(task, str) else task
+        if not isinstance(agent_task, AgentTask):
+            raise TypeError("task must be an AgentTask or non-empty string")
+        if len(calls) > agent_task.max_tool_calls:
+            raise ValueError("tool call list exceeds the task budget")
+        executor = ToolExecutor(self.root, provider=self.provider, settings=self.settings, max_calls=agent_task.max_tool_calls)
+        results: list[ToolResult] = []
+        for call in calls:
+            result = executor.execute(call)
+            results.append(result)
+            if result.status == "failure":
+                break
+        return results
 
     def _plan(self, task: AgentTask, packet: ContextPacket) -> AgentModelResult:
         evidence = [

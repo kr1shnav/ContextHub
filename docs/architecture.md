@@ -33,6 +33,25 @@ Example shape:
 }
 ```
 
+## Phase 9.3 controlled tool execution
+
+`ToolExecutor` is the sole execution boundary for the agent harness. Its
+registry contains only four read-only tools: repository search, file
+inspection, dependency retrieval, and bounded context-packet assembly. Each
+definition has a stable name, a Pydantic input schema, a description, and a
+`read_only` permission classification. Unknown names, extra arguments,
+invalid paths, sensitive files, symlink escapes, and malformed inputs are
+rejected before a handler runs.
+
+The execution loop is bounded by a per-task call limit, per-call timeout, and
+serialized output limit. It returns structured success/failure results and
+sanitized history. Provider failures and internal exceptions become generic
+safe errors; credentials and raw exception text are not returned. The model
+cannot register tools, invoke recursion, run commands, write files, apply
+patches, or access the network. Phase 9.3 intentionally has no mutation
+capabilities; later phases must introduce separate approval and validation
+boundaries.
+
 ## Phase 9.1 agent harness
 
 The agent harness is a planning-only coordination layer over the existing
