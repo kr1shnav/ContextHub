@@ -52,6 +52,23 @@ patches, or access the network. Phase 9.3 intentionally has no mutation
 capabilities; later phases must introduce separate approval and validation
 boundaries.
 
+## Phase 9.4 change proposals
+
+`ProposalGenerator` turns a task and bounded `ContextPacket` (optionally with a
+Phase 9.2 task plan) into a typed `ChangeProposal`. Each proposed file must be
+an existing, non-sensitive repository file and must contain a matching,
+structured unified diff. Absolute paths, traversal, symlink escapes,
+unsupported diff formats, duplicate files, nonexistent targets, malformed
+responses, and size/file-count limit violations are rejected.
+
+`ctx agent propose` displays a reviewable summary. With `--output-dir`, it may
+save a patch artifact only inside a repository-contained destination; it never
+changes source files. Reviewers must inspect the rationale, assumptions, risks,
+source evidence, and validation recommendations, then apply the patch through
+their own approved workflow. Generating a proposal is explicitly different
+from applying it: this phase runs no shell commands, `git apply`, autonomous
+repair, or commit operation.
+
 ## Phase 9.1 agent harness
 
 The agent harness is a planning-only coordination layer over the existing

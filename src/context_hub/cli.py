@@ -19,12 +19,15 @@ from .providers.config import ProviderSettings
 from .orchestration import ContextBudget, ContextOrchestrator
 from .mcp_server import serve_stdio
 from .agent_harness import AgentHarness, AgentTask
+from .proposals import ProposalGenerator, ProposalLimits
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
 mcp_app = typer.Typer(name="mcp", help="Model Context Protocol server commands.")
+agent_app = typer.Typer(name="agent", help="Read-only agent planning and proposal commands.")
 app.add_typer(provider_app)
 app.add_typer(mcp_app)
+app.add_typer(agent_app)
 console = Console()
 
 
@@ -266,6 +269,32 @@ def pack(task: Annotated[str, typer.Argument(help="Developer task for context as
         console.print(f"  {item.path} ({item.score:.2f}) — {item.reason}")
 
 
+@agent_app.command("propose")
+def agent_propose(task: Annotated[str, typer.Argument(help="Coding task for a reviewable patch proposal.")],
+               max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
+               max_tokens: Annotated[int, typer.Option("--max-tokens", min=100, max=100000)] = 6000,
+               output_dir: Annotated[Path | None, typer.Option("--output-dir", help="Safe directory inside the repository for the patch artifact.")] = None,
+               filename: Annotated[str, typer.Option("--filename")] = "proposal.patch",
+               json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Generate a validated patch proposal without applying it."""
+    try:
+        root = Path.cwd(); provider = get_provider(); agent_task = AgentTask(task=task, max_files=max_files, max_tokens=max_tokens)
+        generator = ProposalGenerator(root, provider, limits=ProposalLimits(max_files=max_files))
+        proposal = generator.generate(agent_task)
+        saved = generator.save(proposal, output_dir or (root / ".context-hub" / "proposals"), filename) if output_dir else None
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(proposal.model_dump_json(indent=2))
+    else:
+        console.print("Change Proposal")
+        console.print(f"Summary: {proposal.summary}\nRationale: {proposal.rationale}")
+        console.print("Files: " + ", ".join(item.path for item in proposal.files))
+        if proposal.validation_recommendations: console.print("Validation recommendations: " + "; ".join(proposal.validation_recommendations))
+    if saved: console.print(f"Saved proposal artifact: {saved}")
+
+
 @app.command("agent-plan")
 def agent_plan(task: Annotated[str, typer.Argument(help="Coding task to turn into a repository-aware plan.")],
                max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
@@ -273,22 +302,13 @@ def agent_plan(task: Annotated[str, typer.Argument(help="Coding task to turn int
                json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Create a validated, read-only implementation plan from repository context."""
     try:
-        plan = AgentHarness(Path.cwd(), get_provider()).plan_repository_task(
-            AgentTask(task=task, max_files=max_files, max_tokens=max_tokens)
-        )
+        plan = AgentHarness(Path.cwd(), get_provider()).plan_repository_task(AgentTask(task=task, max_files=max_files, max_tokens=max_tokens))
     except Exception as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
-    if json_output:
-        console.print(plan.model_dump_json(indent=2)); return
+        console.print(f"[red]{exc}[/red]"); raise typer.Exit(code=1) from exc
+    if json_output: console.print(plan.model_dump_json(indent=2)); return
     console.print("Repository-Aware Agent Plan")
     console.print(f"Summary: {plan.summary}\nObjective: {plan.objective}")
-    for step in plan.steps:
-        deps = f" (after {', '.join(step.depends_on)})" if step.depends_on else ""
-        console.print(f"{step.id}: {step.description}{deps}")
-        if step.files: console.print(f"  Evidence files: {', '.join(step.files)}")
-    if plan.validation_commands:
-        console.print("Validation proposed for later execution: " + "; ".join(plan.validation_commands))
+    for step in plan.steps: console.print(f"{step.id}: {step.description}")
 
 
 if __name__ == "__main__":
