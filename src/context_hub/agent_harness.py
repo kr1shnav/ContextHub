@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .orchestration import ContextBudget, ContextOrchestrator
 from .orchestration.models import ContextPacket
@@ -65,6 +65,58 @@ class AgentModelResult(BaseModel):
         return [value.strip() for value in values]
 
 
+class RepositoryPlanStep(BaseModel):
+    """One proposed implementation step; it never represents an executed action."""
+
+    id: str = Field(min_length=1, max_length=40)
+    description: str = Field(min_length=1, max_length=500)
+    files: list[str] = Field(default_factory=list, max_length=20)
+    symbols: list[str] = Field(default_factory=list, max_length=20)
+    depends_on: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("id", "description")
+    @classmethod
+    def text_must_not_be_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("plan step text must not be empty")
+        return value.strip()
+
+
+class RepositoryPlan(BaseModel):
+    """Evidence-bounded, read-only execution plan proposed by the model."""
+
+    summary: str = Field(min_length=1, max_length=500)
+    objective: str = Field(min_length=1, max_length=500)
+    steps: list[RepositoryPlanStep] = Field(min_length=1, max_length=20)
+    evidence_files: list[str] = Field(default_factory=list, max_length=100)
+    evidence_symbols: list[str] = Field(default_factory=list, max_length=100)
+    risks: list[str] = Field(default_factory=list, max_length=20)
+    assumptions: list[str] = Field(default_factory=list, max_length=20)
+    unresolved_questions: list[str] = Field(default_factory=list, max_length=20)
+    validation_commands: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("summary", "objective")
+    @classmethod
+    def plan_text_must_not_be_empty(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("plan text must not be empty")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_dependencies(self) -> "RepositoryPlan":
+        ids = [step.id for step in self.steps]
+        if len(ids) != len(set(ids)):
+            raise ValueError("plan step identifiers must be unique")
+        known = set(ids)
+        for step in self.steps:
+            if step.id in step.depends_on:
+                raise ValueError(f"step {step.id} cannot depend on itself")
+            unknown = set(step.depends_on) - known
+            if unknown:
+                raise ValueError(f"step {step.id} has unknown dependencies: {sorted(unknown)}")
+        return self
+
+
 class AgentStep(BaseModel):
     """One observable harness step; no shell or file mutation is represented."""
 
@@ -98,6 +150,7 @@ class AgentOutcome(BaseModel):
     context_paths: list[str] = Field(default_factory=list)
     context_statistics: dict[str, int] = Field(default_factory=dict)
     error: str | None = None
+    repository_plan: RepositoryPlan | None = None
 
 
 class AgentHarness:
@@ -163,6 +216,19 @@ class AgentHarness:
             error=f"Planning stopped after the maximum of {agent_task.max_iterations} iterations.",
         )
 
+    def plan_repository_task(self, task: AgentTask | str) -> RepositoryPlan:
+        """Return a validated repository-aware plan without mutating or executing anything."""
+        agent_task = AgentTask(task=task) if isinstance(task, str) else task
+        if not isinstance(agent_task, AgentTask):
+            raise TypeError("task must be an AgentTask or non-empty string")
+        packet = self.orchestrator_type(
+            self.root,
+            self.provider,
+            budget=ContextBudget(max_files=agent_task.max_files, max_tokens=agent_task.max_tokens),
+            settings=self.settings,
+        ).build(agent_task.task)
+        return self._repository_plan(agent_task, packet)
+
     def _plan(self, task: AgentTask, packet: ContextPacket) -> AgentModelResult:
         evidence = [
             {
@@ -190,6 +256,26 @@ class AgentHarness:
             )
         )
         return AgentModelResult.model_validate(_parse_json_object(response.text))
+
+    def _repository_plan(self, task: AgentTask, packet: ContextPacket) -> RepositoryPlan:
+        allowed_files = {item.path for item in packet.files}
+        allowed_symbols = {item.symbol for item in packet.files if item.symbol}
+        evidence = [{"path": item.path, "symbol": item.symbol, "source": item.source, "reason": item.reason, "content": item.content} for item in packet.files]
+        prompt = json.dumps({"task": task.task, "repository_evidence": evidence}, sort_keys=True)
+        response = self.provider.generate(GenerationRequest(
+            system=(SYSTEM_PROMPT + " You are a read-only repository-aware planning agent. Return exactly one JSON object matching the RepositoryPlan schema: summary, objective, steps (id, description, files, symbols, depends_on), evidence_files, evidence_symbols, risks, assumptions, unresolved_questions, validation_commands. "
+                    "Only name files and symbols present in supplied repository_evidence. Mark suggestions as assumptions or risks. Do not execute commands, edit files, or claim unsupported repository facts."),
+            user=prompt[: self.settings.max_context_chars], model=self.settings.model,
+            temperature=self.settings.temperature, max_tokens=self.settings.max_tokens,
+        ))
+        plan = RepositoryPlan.model_validate(_parse_json_object(response.text))
+        referenced_files = set(plan.evidence_files) | {path for step in plan.steps for path in step.files}
+        referenced_symbols = set(plan.evidence_symbols) | {symbol for step in plan.steps for symbol in step.symbols}
+        if not referenced_files <= allowed_files:
+            raise ValueError("plan references files not supported by repository evidence")
+        if not referenced_symbols <= allowed_symbols:
+            raise ValueError("plan references symbols not supported by repository evidence")
+        return plan
 
     @staticmethod
     def _record_context(state: AgentExecutionState, packet: ContextPacket) -> None:

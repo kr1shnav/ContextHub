@@ -18,6 +18,7 @@ from .providers import MockProvider, get_provider
 from .providers.config import ProviderSettings
 from .orchestration import ContextBudget, ContextOrchestrator
 from .mcp_server import serve_stdio
+from .agent_harness import AgentHarness, AgentTask
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -263,6 +264,31 @@ def pack(task: Annotated[str, typer.Argument(help="Developer task for context as
     console.print(f"Task: {packet.task}\nFiles: {packet.statistics.files_selected}\nEstimated tokens: {packet.statistics.estimated_tokens}")
     for item in packet.files:
         console.print(f"  {item.path} ({item.score:.2f}) — {item.reason}")
+
+
+@app.command("agent-plan")
+def agent_plan(task: Annotated[str, typer.Argument(help="Coding task to turn into a repository-aware plan.")],
+               max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
+               max_tokens: Annotated[int, typer.Option("--max-tokens", min=100, max=100000)] = 6000,
+               json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Create a validated, read-only implementation plan from repository context."""
+    try:
+        plan = AgentHarness(Path.cwd(), get_provider()).plan_repository_task(
+            AgentTask(task=task, max_files=max_files, max_tokens=max_tokens)
+        )
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(plan.model_dump_json(indent=2)); return
+    console.print("Repository-Aware Agent Plan")
+    console.print(f"Summary: {plan.summary}\nObjective: {plan.objective}")
+    for step in plan.steps:
+        deps = f" (after {', '.join(step.depends_on)})" if step.depends_on else ""
+        console.print(f"{step.id}: {step.description}{deps}")
+        if step.files: console.print(f"  Evidence files: {', '.join(step.files)}")
+    if plan.validation_commands:
+        console.print("Validation proposed for later execution: " + "; ".join(plan.validation_commands))
 
 
 if __name__ == "__main__":

@@ -248,6 +248,20 @@ Tests use temporary repositories and databases and do not require network access
 - Planned: Phase 8 MCP / Agent Integration
 - Planned: Phase 9 Developer Experience / Demo
 
+Phase 9.2 adds `ctx agent-plan`, a read-only repository-aware planner. It
+reuses the Context Orchestrator packet and the configured provider, then
+validates a bounded `RepositoryPlan`. Evidence-backed file and symbol names
+are kept separate from model-generated recommendations such as risks,
+assumptions, unresolved questions, and validation commands; unsupported
+repository claims, malformed responses, duplicate steps, and invalid
+dependencies are rejected.
+
+Example:
+
+```bash
+ctx agent-plan "Add retry handling to the indexer" --json
+```
+
 ## Hackathon direction
 
 Context Hub is being developed for the Coding and Agentic Engineering track of the Nebius × NVIDIA Global AI Hackathon. Phase 6 integrates Nebius Token Factory and NVIDIA Nemotron for bounded task analysis while the repository core remains deterministic and provider-independent.

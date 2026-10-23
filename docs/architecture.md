@@ -1,5 +1,38 @@
 # Context Hub architecture
 
+## Phase 9.2 repository-aware task planning
+
+`AgentHarness.plan_repository_task()` converts a non-empty coding task and the
+existing `ContextOrchestrator` `ContextPacket` into a bounded `RepositoryPlan`.
+The plan contains an objective, ordered steps, supported file/symbol evidence,
+step dependencies, risks, assumptions, unresolved questions, and validation
+commands proposed for later execution. Step identifiers must be unique and all
+dependencies must point to another step.
+
+Repository evidence is distinct from generated recommendations: a file or
+symbol may be named in a plan only when it appears in the supplied packet.
+Risks, assumptions, and validation commands are model-generated suggestions,
+not claims that those actions or facts have already occurred. Malformed JSON,
+invalid schemas, unsupported evidence, duplicate identifiers, and unknown
+dependencies are rejected. The phase remains read-only and performs no shell
+commands, file writes, patches, retries, or autonomous repairs.
+
+Example shape:
+
+```json
+{
+  "summary": "Add bounded planning",
+  "objective": "Turn a coding task into an evidence-backed plan",
+  "steps": [{"id": "inspect", "description": "Review src/app.py", "files": ["src/app.py"]}],
+  "evidence_files": ["src/app.py"],
+  "evidence_symbols": [],
+  "risks": ["The requested behavior may need a product decision"],
+  "assumptions": [],
+  "unresolved_questions": [],
+  "validation_commands": ["pytest"]
+}
+```
+
 ## Phase 9.1 agent harness
 
 The agent harness is a planning-only coordination layer over the existing

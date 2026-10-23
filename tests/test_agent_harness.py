@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from context_hub.agent_harness import AgentHarness, AgentTask, ExecutionStatus
-from context_hub.orchestration.models import ContextStatistics
+from context_hub.orchestration.models import ContextEvidence, ContextStatistics
 from context_hub.providers import ProviderError
 from context_hub.providers.config import ProviderSettings
 from context_hub.providers.models import GenerationResponse
@@ -89,3 +89,25 @@ def test_harness_handles_context_provider_failure():
     outcome = AgentHarness(Path.cwd(), Provider(), settings=ProviderSettings(), orchestrator_type=BrokenOrchestrator).run("task")
     assert outcome.status == ExecutionStatus.FAILED
     assert "context packet" in outcome.error
+
+
+def test_repository_plan_validates_evidence_and_dependencies():
+    class PacketOrchestrator(FakeOrchestrator):
+        def build(self, task):
+            packet = FakePacket()
+            packet.files = [ContextEvidence(id="x", path="src/app.py", symbol="run", source="retrieval", score=1, reason="match", content="def run(): pass")]
+            return packet
+
+    response = '{"summary":"Implement safely","objective":"Add planning","steps":[{"id":"inspect","description":"Review run","files":["src/app.py"],"symbols":["run"]},{"id":"test","description":"Add tests","depends_on":["inspect"]}],"evidence_files":["src/app.py"],"evidence_symbols":["run"],"risks":[],"assumptions":[],"unresolved_questions":[],"validation_commands":["pytest"]}'
+    plan = AgentHarness(Path.cwd(), Provider(response), settings=ProviderSettings(), orchestrator_type=PacketOrchestrator).plan_repository_task("Add planning")
+    assert [step.id for step in plan.steps] == ["inspect", "test"]
+
+
+@pytest.mark.parametrize("payload", [
+    '{"summary":"x","objective":"x","steps":[{"id":"a","description":"x"},{"id":"a","description":"y"}]}',
+    '{"summary":"x","objective":"x","steps":[{"id":"a","description":"x","depends_on":["missing"]}]}',
+    '{"summary":"x","objective":"x","steps":[{"id":"a","description":"x","files":["not-in-context"]}]}',
+])
+def test_repository_plan_rejects_invalid_dependencies_or_unsupported_evidence(payload):
+    with pytest.raises(ValueError):
+        AgentHarness(Path.cwd(), Provider(payload), settings=ProviderSettings(), orchestrator_type=FakeOrchestrator).plan_repository_task("task")
