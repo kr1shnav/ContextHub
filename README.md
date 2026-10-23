@@ -1,253 +1,304 @@
 # Context Hub
 
-> Context orchestration for AI coding agents.
+### Give AI the context it needs to think better.
 
-Context Hub builds a structured, local-first understanding of a software repository so coding agents receive task-specific context instead of an arbitrary pile of files. It combines repository intelligence, a code graph, incremental indexing, and explainable hybrid retrieval.
+Context Hub is a developer-focused context engineering system designed to retrieve, select, prioritize, and package relevant information for AI tasks. It helps developers prepare structured, task-specific context from project files instead of manually assembling large prompts.
 
-## Project status
+---
 
-| Phase | Status |
-| --- | --- |
-| 1 — Foundation | ✅ Complete |
-| 2 — Repository Intelligence | ✅ Complete |
-| 3 — Code Graph | ✅ Complete |
-| 4 — Persistent Index | ✅ Complete |
-| 5 — Hybrid Retrieval | ✅ Complete |
-| 6 — Nebius + NVIDIA Nemotron | Planned |
-| 7 — Context Orchestrator | Planned |
-| 8 — MCP / Agent Integration | Planned |
-| 9 — Developer Experience / Demo | Planned |
+## Table of Contents
 
-## The problem
+- [Overview](#overview)
+- [The Problem](#the-problem)
+- [Goals](#goals)
+- [How It Works](#how-it-works)
+- [Architecture](#architecture)
+- [Core Components](#core-components)
+- [Context Packet](#context-packet)
+- [Installation](#installation)
+- [CLI Reference](#cli-reference)
+- [Development Workflow](#development-workflow)
+- [Testing](#testing)
+- [Design Principles](#design-principles)
+- [Limitations](#limitations)
+- [Future Directions](#future-directions)
+- [Contributing](#contributing)
 
-Coding agents often receive too little context, too much irrelevant context, or manually selected files. A keyword search or simple top-k retrieval can miss the relationships that explain how a change propagates through a repository.
+---
 
-For “fix the authentication timeout,” useful context may span `src/auth/session.py`, `src/auth/token.py`, `src/api/routes.py`, `src/models/user.py`, related tests, and documentation. The important question is which symbols, dependencies, callers, tests, and documents are connected to the task.
+## Overview
 
-## The solution
+AI systems depend heavily on the context provided to them. When working with an unfamiliar codebase or a large software project, developers often spend considerable time identifying relevant files, extracting useful information, and preparing prompts.
 
-Context Hub incrementally scans a repository, extracts structure, builds a code graph, persists metadata locally, and ranks context using multiple deterministic signals.
+Context Hub treats context preparation as a dedicated engineering process.
 
-```text
-Developer Task → Query Normalization → Repository Retrieval
-      → Code Graph Signals → Relevance Ranking → Explainable Results
-      → Future Context Packet → AI Coding Agent
+Rather than simply passing large amounts of information to an AI model, it provides a pipeline for collecting potentially relevant evidence, selecting useful information, managing a context budget, and assembling a task-specific context packet.
+
+The goal is to make context preparation more structured, inspectable, and reusable.
+
+## The Problem
+
+Developers using AI coding assistants and agentic systems frequently encounter several challenges:
+
+- **Context fragmentation:** Relevant information is distributed across source files, configuration files, and documentation.
+- **Information overload:** Supplying too much context can distract an AI model from the actual task.
+- **Limited context windows:** Models have practical limits on the amount of information they can process at once.
+- **Manual preparation:** Developers repeatedly collect and summarize project information.
+- **Poor traceability:** It can be difficult to determine which sources influenced a model's response.
+- **Redundant evidence:** Multiple files may contain overlapping information that consumes unnecessary context.
+
+Context Hub aims to address these challenges through a structured context preparation pipeline.
+
+## Goals
+
+Context Hub is designed to:
+
+- Retrieve information relevant to a given task.
+- Select useful evidence from available project sources.
+- Manage context size through a budgeting stage.
+- Assemble structured context packets.
+- Make context preparation easier to inspect and debug.
+- Provide a developer-friendly command-line interface.
+- Establish a foundation for more advanced context engineering workflows.
+
+## How It Works
+
+Context Hub follows a task-oriented pipeline.
+
+```mermaid
+flowchart TD
+    A[Task Description] --> B[Source Discovery]
+    B --> C[Context Retrieval]
+    C --> D[Evidence Selection]
+    D --> E[Context Budgeting]
+    E --> F[Packet Assembly]
+    F --> G[Context Packet]
 ```
 
-Task planning beyond focused task analysis and model-assisted coding remain planned for later phases.
+### Pipeline stages
 
-## AI reasoning
+1. **Task input:** Receive a natural-language description of the task.
+2. **Source discovery:** Identify available project files and other supported sources.
+3. **Retrieval:** Find candidate information relevant to the task.
+4. **Evidence selection:** Determine which retrieved information is useful enough to retain.
+5. **Context budgeting:** Manage the selected evidence against the configured or estimated context limit.
+6. **Packet assembly:** Organize the selected information into a structured packet.
+7. **Output:** Return the packet for inspection or use in a downstream AI workflow.
 
-Phase 6 adds a provider-agnostic reasoning layer and `ctx analyze`. It uses existing deterministic hybrid-retrieval metadata as bounded input; it does not replace indexing, graph construction, or retrieval.
-
-The implemented providers use OpenAI-compatible chat-completions APIs with default model `nvidia/nemotron-3-super-120b-a12b`. Nebius remains the default provider. Configure Nebius with `NEBIUS_API_KEY` and optionally `NEBIUS_MODEL` and `NEBIUS_BASE_URL`. To use NVIDIA API Catalog, set `CONTEXT_HUB_PROVIDER=nvidia`, `NVIDIA_API_KEY`, and optionally `NVIDIA_MODEL` and `NVIDIA_BASE_URL` (default `https://integrate.api.nvidia.com/v1`). NVIDIA's hosted Nemotron models include `nvidia/nemotron-3-super-120b-a12b`, `nvidia/nemotron-3-nano-30b-a3b`, and `nvidia/nemotron-3.5-lightning-30b-a3b`.
-
-```bash
-ctx analyze "Fix authentication timeout bug"
-ctx analyze "Fix authentication timeout bug" --json
-ctx provider status
-```
-
-For deterministic local context generation without an API key, use `ctx pack "..." --no-llm`.
-
-The response is validated structured task analysis. `MockProvider` supports deterministic local tests. Full agent functionality, MCP, autonomous coding, and production-scale deployment remain planned.
-
-### Context Orchestrator
-
-Phase 7 adds `ctx pack`, which coordinates task analysis, multiple deterministic retrieval queries, bounded graph expansion, evidence ranking, safe source loading, and context budgeting into a `ContextPacket`. Nemotron may refine priorities using only supplied evidence; provider failure falls back to deterministic retrieval and graph evidence.
-
-```bash
-ctx pack "Fix authentication timeout bug" --max-files 7 --max-tokens 4000
-ctx pack "Fix authentication timeout bug" --json
-```
-
-## Why it is different
-
-Context Hub is not primarily a chatbot, vector database, or generic RAG wrapper:
-
-```text
-Query → Embeddings → Top 5 chunks → LLM
-```
-
-Its current relationship-aware path is:
-
-```text
-Task → Query normalization → Lexical/symbol/path matching
-     → Structural and dependency signals → Code-graph expansion
-     → Explainable ranking → Relevant repository context
-```
-
-Semantic embeddings are intentionally not part of the current implementation.
-
-## Current capabilities
-
-- Repository scanning that respects `.gitignore` and excludes sensitive files
-- SHA-256 file hashing, language detection, symbol extraction, and import extraction
-- Python AST parsing plus heuristic fallback parsing for other supported languages
-- Deterministic repository, file, symbol, and external graph nodes
-- Import, dependency, containment, and definition relationships
-- Local SQLite index at `.context-hub/index.db`
-- Incremental new, modified, unchanged, and deleted-file detection
-- Transactional updates and `--force` reindexing
-- Lexical, symbol, path, import, dependency, and dependent retrieval
-- Deterministic scoring, result limits, explanations, and token-size estimates
-
-## Supported languages
-
-Language detection supports Python, JavaScript, TypeScript, Java, C, C++, Go, Rust, HTML, CSS, JSON, YAML, Markdown, SQL, and Shell. Python uses the built-in AST parser. Several other languages use conservative heuristic parsing; a Tree-sitter integration boundary is available for future grammar support. Detection support does not imply equivalent structural parsing quality.
+The exact algorithms and internal data structures are implementation-dependent.
 
 ## Architecture
 
-```text
-                         CONTEXT HUB
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-         Repository                       Developer Task
-              ↓                               ↓
-     Repository Intelligence          Query Processing
-              ↓                               ↓
-          Code Graph                 Hybrid Retrieval
-              └───────────────┬───────────────┘
-                              ↓
-                    Explainable Ranking
-                              ↓
-                     Future Context Packet
-                              ↓
-                      AI Coding Agent
+Context Hub separates context preparation into logical responsibilities.
+
+### Context orchestration
+
+The context orchestrator coordinates the pipeline. It connects retrieval, evidence selection, budgeting, and packet assembly into a single task-oriented workflow.
+
+### Retrieval layer
+
+The retrieval layer identifies candidate information from available sources. Depending on the implementation, retrieval can use lexical matching, semantic similarity, metadata, or other ranking techniques.
+
+### Evidence selection layer
+
+The evidence selection layer reduces the candidate set to information useful for the task while accounting for relevance, overlap, and size.
+
+### Budgeting layer
+
+The budgeting layer manages the amount of evidence that can be included in the packet. The accuracy of its estimates depends on the counting method and any tokenizer used.
+
+### Packet assembly layer
+
+The packet assembly layer combines the task description and selected evidence into the output format supported by the project.
+
+These are conceptual responsibilities, not a claim that every stage is implemented as an independent module.
+
+## Core Components
+
+### Context retrieval
+
+Retrieval finds potentially relevant information for the current task.
+
+A useful retrieval system should make it possible to identify the source of each result and investigate why particular content was selected.
+
+### Embeddings
+
+Text embeddings represent content as numerical vectors. When supported by the configured retrieval implementation, semantic similarity can help identify conceptually related content even when the wording differs.
+
+The embedding model, storage mechanism, and similarity algorithm must be verified against the actual implementation.
+
+### Evidence selection
+
+Evidence selection determines which retrieved content should enter the final packet. Its purpose is to preserve useful information without unnecessarily including irrelevant or redundant material.
+
+### Context budgeting
+
+Context budgeting accounts for the space available to the final packet. Depending on the implementation, this may use token estimates, character counts, or another measurement.
+
+### Packet assembly
+
+Packet assembly produces the final task-specific context output. The packet should make its task and included sources identifiable.
+
+## Context Packet
+
+A context packet is the output of the context preparation pipeline.
+
+A packet may contain:
+
+- The original task description.
+- The files or sources selected for the task.
+- Relevant extracted content or evidence.
+- Context size estimates.
+- Additional metadata supported by the implementation.
+
+For example, a task might ask Context Hub to explain how a particular orchestration component builds a context packet.
+
+```bash
+uv run ctx pack "Explain how ContextOrchestrator builds a context packet, including retrieval, evidence selection, budgeting, and packet assembly."
 ```
 
-### Code graph
+The CLI can then produce a packet describing the task and the selected files or evidence, according to the current implementation.
 
-```text
-File ── DEFINES ──→ Symbol
-File ── IMPORTS ──→ Module or external package
-File ── DEPENDS_ON → File
-Symbol ── DEFINED_IN → File
+A context packet is intended to prepare information for downstream reasoning; it does not itself guarantee that an AI model's eventual answer will be correct.
+
+## Installation
+
+Context Hub's development workflow uses Python and `uv`.
+
+### Prerequisites
+
+- Python compatible with the project's declared requirements.
+- [`uv`](https://docs.astral.sh/uv/) for dependency and environment management.
+- A local checkout of the Context Hub repository.
+
+### Set up the project
+
+Clone the repository and enter its directory:
+
+```bash
+git clone <YOUR_REPOSITORY_URL>
+cd <YOUR_REPOSITORY_DIRECTORY>
 ```
 
-If `session.py` is relevant, dependencies and dependents can surface related modules instead of treating it as an isolated text chunk. Unresolved imports remain observable and are marked unresolved.
+Install the project dependencies:
 
-### Retrieval
-
-```text
-Task → Query normalization → Candidate generation
-     ├─ symbol matching
-     ├─ path matching
-     ├─ lexical/import matching
-     └─ dependency/dependent matching
-     → Score, merge, deduplicate → Deterministic ranking
-     → Explainable results
+```bash
+uv sync
 ```
 
-Scores are bounded relevance scores, not probabilities. Token estimates use a simple character-based approximation.
+**Note:** Replace the repository placeholders with the actual Git URL and directory name. Use the Python version and setup requirements declared by the project.
 
-## CLI
+## CLI Reference
+
+Context Hub exposes a command-line interface named `ctx`.
+
+Run the commands below from the project root.
+
+### General commands
 
 | Command | Purpose |
-| --- | --- |
-| `ctx --help` / `ctx version` | Help and version |
-| `ctx init` / `ctx status` | Project and index metadata |
-| `ctx scan` | Scan repository intelligence |
-| `ctx inspect <path>` | Inspect a file |
-| `ctx symbols <path>` | List file symbols |
-| `ctx graph` | Summarize the in-memory graph |
-| `ctx deps <path>` / `ctx dependents <path>` | Dependency queries |
-| `ctx index` / `ctx index --force` | Create or update the SQLite index |
-| `ctx search "<query>"` | Search indexed context |
-| `ctx search "<query>" --explain` | Show retrieval explanations |
-| `ctx mcp serve` | Start the local MCP server over stdio |
+|---|---|
+| `uv run ctx --help` | Display the CLI help and available commands. |
+| `uv run ctx --version` | Display the version, if version support is implemented. |
 
-## Quick start
+### Context packing
+
+#### `ctx pack`
+
+**Syntax**
 
 ```bash
-git clone https://github.com/kr1shnav/ContextHub.git
-cd ContextHub
-uv sync
-uv run ctx init
-uv run ctx index
-uv run ctx status
-uv run ctx search "authentication timeout"
+uv run ctx pack "Your task description"
 ```
 
-Example output varies with the indexed repository, but every result includes its path, score, signals, reason, and estimated token size.
+**Purpose:** Build a context packet for a specific task.
 
-### MCP server
-
-After installing dependencies, launch the local MCP server with:
+**Example**
 
 ```bash
-uv run ctx mcp serve
+uv run ctx pack "Explain the architecture of this project."
 ```
 
-The server uses stdio and does not require an API key to start. It currently
-provides these read-only tools:
-
-See [docs/mcp.md](docs/mcp.md) for verified VS Code and Claude Code local
-stdio configuration formats, environment guidance, and an end-to-end agent
-workflow. The examples are configuration guides and have not been runtime-
-tested against those client installations in this repository.
-
-The Phase 9.1 planning-only agent harness is documented in
-[docs/architecture.md](docs/architecture.md). It is available as the typed
-`context_hub.agent_harness.AgentHarness` Python API; no new CLI or MCP command
-is added in this phase.
-
-| Tool | Arguments | Purpose |
-| --- | --- | --- |
-| `search_context` | `query: string`, `limit: integer` (1–100, default 20) | Search the local indexed repository metadata |
-| `inspect_file` | `path: string` | Return file metadata, symbols, and imports |
-| `get_dependencies` | `path: string` (or a dotted module name) | Return resolved and external dependencies |
-| `build_context_packet` | `task: string`, `max_files: integer` (1–100, default 10), `max_tokens: integer` (100–100000, default 6000) | Assemble bounded provider-assisted context |
-
-Example MCP tool request payloads:
-
-```json
-{"name":"search_context","arguments":{"query":"authentication","limit":10}}
-{"name":"inspect_file","arguments":{"path":"src/context_hub/cli.py"}}
-{"name":"get_dependencies","arguments":{"path":"src.context_hub.cli"}}
-{"name":"build_context_packet","arguments":{"task":"add MCP tool tests","max_files":5,"max_tokens":3000}}
-```
-
-Search requires an existing local index (`uv run ctx index`). The inspection
-and dependency tools return metadata only. `build_context_packet` uses the
-existing orchestrator and returns only its bounded, repository-relative file
-evidence; it requires the configured provider and local index.
-
-## Project structure
-
-```text
-src/context_hub/
-├── cli.py, config.py, languages.py, models.py
-├── parsing.py, scanner.py, graph.py
-├── storage/       # database.py, indexer.py
-└── retrieval/     # engine.py, models.py, query.py
-tests/
-├── test_foundation.py, test_repository_intelligence.py
-├── test_graph.py, test_storage.py, test_retrieval.py
-```
-
-## Design and security
-
-Context Hub is local-first, deterministic where possible, explainable, repository-aware, incremental, modular, provider-independent, and graph-aware. The scanner respects `.gitignore` and excludes `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `credentials.*`, and `secrets.*`. Source contents are not stored in the graph or persistent index. The SQLite database is local generated state; never commit API keys, credentials, tokens, or private keys.
-
-## Development
+A more specific example:
 
 ```bash
-uv sync
+uv run ctx pack "Explain how ContextOrchestrator builds a context packet, including retrieval, evidence selection, budgeting, and packet assembly."
+```
+
+**Typical use cases**
+
+- Prepare context for an AI coding task.
+- Investigate an unfamiliar module.
+- Gather relevant project information before an architectural review.
+- Inspect which files are selected for a task.
+
+The exact output fields depend on the current implementation.
+
+### Command-specific help
+
+```bash
+uv run ctx pack --help
+```
+
+Use this command to inspect the supported arguments and options for `pack`.
+
+### Development commands
+
+These commands support the development workflow; they are not necessarily `ctx` subcommands.
+
+| Command | Purpose |
+|---|---|
+| `uv sync` | Install dependencies declared by the project. |
+| `uv run ctx --help` | Inspect the CLI and verify that its entry point is available. |
+| `uv run pytest` | Run the test suite if the project uses pytest. |
+
+**Command availability:** `ctx pack` is the documented primary workflow. Confirm optional commands such as `--version` and any additional subcommands against `uv run ctx --help` before relying on them.
+
+## Development Workflow
+
+A typical development workflow is:
+
+1. Install dependencies using `uv sync`.
+2. Inspect the CLI using `uv run ctx --help`.
+3. Run a representative `ctx pack` task.
+4. Inspect the generated packet.
+5. Investigate retrieval and evidence-selection behavior.
+6. Verify context budgeting and packet assembly.
+7. Run the available automated tests.
+8. Update documentation when command behavior or output formats change.
+
+### Example investigation task
+
+```bash
+uv run ctx pack "Trace the flow of information from task input to final context packet."
+```
+
+This is useful when studying the pipeline or investigating how the orchestrator coordinates its stages.
+
+## Testing
+
+Run the project's tests using the test runner configured by the repository.
+
+For a project using pytest:
+
+```bash
 uv run pytest
 ```
 
-Tests use temporary repositories and databases and do not require network access.
+Testing should cover the components that exist in the implementation, including:
 
-## Roadmap
+- Task input validation.
+- Source discovery.
+- Retrieval behavior.
+- Evidence selection.
+- Budget enforcement.
+- Packet assembly.
+- CLI argument handling.
+- Error handling for invalid inputs and unavailable sources.
 
-- ✅ Phases 1–5: Foundation, Repository Intelligence, Code Graph, Persistent Index, Hybrid Retrieval
-- Complete: Phase 6 Nebius + NVIDIA Nemotron task analysis
-- Complete: Phase 7 Context Orchestrator
-- Planned: Phase 8 MCP / Agent Integration
-- Planned: Phase 9 Developer Experience / Demo
+This list describes recommended coverage, not a claim that every test is already present.
 
+<<<<<<< HEAD
 Phase 9.2 adds `ctx agent-plan`, a read-only repository-aware planner. It
 reuses the Context Orchestrator packet and the configured provider, then
 validates a bounded `RepositoryPlan`. Evidence-backed file and symbol names
@@ -263,13 +314,73 @@ ctx agent-plan "Add retry handling to the indexer" --json
 ```
 
 ## Hackathon direction
+=======
+## Design Principles
+>>>>>>> 09d55a68db6cc0c76580a3f8eb601ce842d3d4f0
 
-Context Hub is being developed for the Coding and Agentic Engineering track of the Nebius × NVIDIA Global AI Hackathon. Phase 6 integrates Nebius Token Factory and NVIDIA Nemotron for bounded task analysis while the repository core remains deterministic and provider-independent.
+### Task-oriented context
+
+Context should be assembled around the task instead of collected indiscriminately.
+
+### Explicit evidence
+
+Selected information should be inspectable so developers can understand what was included.
+
+### Budget awareness
+
+Context preparation should account for the capacity available to downstream AI systems.
+
+### Modularity
+
+Retrieval, selection, budgeting, and packet assembly should have understandable responsibilities.
+
+### Reproducibility
+
+The system should make its behavior explainable and repeatable where possible.
+
+### Developer experience
+
+Context preparation should be accessible through a straightforward CLI.
+
+## Limitations
+
+Context Hub should not be assumed to:
+
+- Retrieve every relevant piece of information.
+- Guarantee factual correctness of source documents.
+- Eliminate hallucinations in downstream models.
+- Support every file type or external source.
+- Produce exact model-token counts without suitable tokenization.
+- Integrate automatically with every AI coding assistant.
+- Guarantee improved model performance without evaluation.
+
+Actual limitations depend on the current implementation and configuration.
+
+## Future Directions
+
+Potential directions for further development include:
+
+- Additional retrieval strategies.
+- Improved evidence ranking and deduplication.
+- More precise token-budget estimation.
+- Context packet inspection and debugging tools.
+- Retrieval-quality evaluation and benchmarks.
+- Integrations with coding assistants and agent frameworks.
+- More detailed pipeline observability.
+- Improved reproducibility across runs.
+
+These are potential development directions and are not represented as completed features.
 
 ## Contributing
 
-Fork or clone the repository, create a feature branch, make a focused change with tests, run `uv run pytest` and `git diff --check`, then open a pull request.
+Contributions should improve correctness, maintainability, testability, or developer experience.
 
-## Technology
+A suggested contribution workflow:
 
-Python 3.12+, Typer, Rich, Pydantic v2, SQLite through Python’s standard library, and a Tree-sitter integration boundary. No vector database, search server, LLM, or cloud service is required for the current phases.
+1. Understand the relevant component and its responsibilities.
+2. Make a focused change.
+3. Add or update tests.
+4. Run the project's test suite.
+5. Update the documentation if behavior changes.
+6. Submit a pull request explaining the change and its motivation.
+
