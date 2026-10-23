@@ -20,6 +20,8 @@ from .orchestration import ContextBudget, ContextOrchestrator
 from .mcp_server import serve_stdio
 from .agent_harness import AgentHarness, AgentTask
 from .proposals import ProposalGenerator, ProposalLimits
+from .proposals import ChangeProposal, ProposedFileDiff
+from .validation import CheckKind, ProposalValidator, ValidationCheck, ValidationRequest
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -293,6 +295,36 @@ def agent_propose(task: Annotated[str, typer.Argument(help="Coding task for a re
         console.print("Files: " + ", ".join(item.path for item in proposal.files))
         if proposal.validation_recommendations: console.print("Validation recommendations: " + "; ".join(proposal.validation_recommendations))
     if saved: console.print(f"Saved proposal artifact: {saved}")
+
+
+@agent_app.command("validate")
+def agent_validate(proposal_file: Annotated[Path, typer.Argument(help="Saved unified-diff proposal file.")],
+                   execute: Annotated[bool, typer.Option("--execute", help="Explicitly opt in to approved checks.")] = False,
+                   check: Annotated[list[CheckKind] | None, typer.Option("--check", help="Approved check: pytest or py_compile.")] = None,
+                   path: Annotated[str | None, typer.Option("--path", help="Repository-relative Python path for py_compile.")] = None,
+                   json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """Validate a saved proposal; checks are structural unless --execute is supplied."""
+    try:
+        root = Path.cwd(); artifact = proposal_file.resolve()
+        if not artifact.is_file() or not artifact.is_relative_to(root): raise ValueError("proposal file must be inside the repository")
+        text = artifact.read_text(encoding="utf-8")
+        chunks = [chunk.strip() for chunk in text.split("\n\n--- ") if chunk.strip()]
+        files = []
+        for chunk in chunks:
+            patch_text = chunk if chunk.startswith("--- ") else "--- " + chunk
+            header = patch_text.splitlines()[0][4:].split("\t")[0].removeprefix("a/")
+            files.append(ProposedFileDiff(path=header, patch=patch_text))
+        proposal = ChangeProposal(summary="Saved proposal", rationale="Validation of saved unified diff", files=files)
+        checks = [ValidationCheck(kind=item, path=path) for item in (check or [])]
+        report = ProposalValidator(root).validate(proposal, ValidationRequest(checks=checks, execute=execute))
+    except Exception as exc:
+        console.print(f"[red]{exc}[/red]"); raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(report.model_dump_json(indent=2)); return
+    console.print(f"Validation: {report.status.value} ({report.proposal_id})")
+    for item in report.static_validation: console.print(f"  Static: {item}")
+    for item in report.checks: console.print(f"  {item.kind.value}: {item.status.value}" + (f" (exit {item.exit_code})" if item.exit_code is not None else ""))
+    if report.failure_output: console.print(report.failure_output)
 
 
 @app.command("agent-plan")

@@ -69,6 +69,22 @@ their own approved workflow. Generating a proposal is explicitly different
 from applying it: this phase runs no shell commands, `git apply`, autonomous
 repair, or commit operation.
 
+## Phase 9.5 validation and feedback
+
+`ProposalValidator` produces a typed `ValidationReport` for a saved proposal.
+Structural validation always runs first: patch format, existing target files,
+sensitive paths, repository boundaries, and proposal limits are checked before
+any executable check. The default is non-executing; requested checks are
+reported as `not_run`, never as passing.
+
+Executable checks are limited to fixed schemas (`pytest` and Python
+`py_compile`) and require `--execute`. They use structured argument lists,
+`shell=False`, an explicit repository working directory, timeouts, and bounded
+output. Model output cannot select commands, environment variables, or working
+directories. Reports distinguish failed, not-run, and incomplete checks. Checks
+run against the current working tree; proposals are never applied, and there
+is no repair loop, dependency installation, network access, or commit.
+
 ## Phase 9.1 agent harness
 
 The agent harness is a planning-only coordination layer over the existing

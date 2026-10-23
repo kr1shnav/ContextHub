@@ -247,6 +247,11 @@ class AgentHarness:
                 break
         return results
 
+    def validate_proposal(self, proposal: object, *, execute: bool = False) -> object:
+        """Feed a bounded validation report back through the harness boundary."""
+        from .validation import ProposalValidator, ValidationRequest
+        return ProposalValidator(self.root).validate(proposal, ValidationRequest(execute=execute))
+
     def _plan(self, task: AgentTask, packet: ContextPacket) -> AgentModelResult:
         evidence = [
             {
