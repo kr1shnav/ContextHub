@@ -9,9 +9,6 @@ on:
 permissions:
   contents: read
 
-env:
-  UV_FROZEN: "1"
-
 jobs:
   tests:
     name: Tests (Python ${{ matrix.python-version }})
@@ -37,6 +34,7 @@ jobs:
       - name: Run tests
         run: uv run --locked --with pytest==8.3.5 pytest
 
+
   package:
     name: Build package
     runs-on: ubuntu-latest
@@ -54,6 +52,7 @@ jobs:
           python-version: "3.12"
       - name: Build wheel and source distribution
         run: uv build
+
 
   dependency-audit:
     name: Dependency audit
