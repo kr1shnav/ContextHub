@@ -1,0 +1,53 @@
+name: Release candidate
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-inspect:
+    name: Build and inspect release artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check tag matches package version
+        shell: bash
+        run: test "${GITHUB_REF_NAME#v}" = "$(uv run --locked python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+      - name: Build artifacts
+        run: uv build
+      - name: Inspect artifacts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import tarfile, zipfile
+          from pathlib import Path
+          artifacts = list(Path("dist").iterdir())
+          wheels = [p for p in artifacts if p.suffix == ".whl"]
+          sdists = [p for p in artifacts if p.name.endswith(".tar.gz")]
+          assert len(wheels) == 1 and len(sdists) == 1
+          forbidden = (".context-hub", ".env", "credentials", "secrets", "uv.lock")
+          wheel_names = zipfile.ZipFile(wheels[0]).namelist()
+          sdist_names = tarfile.open(sdists[0]).getnames()
+          assert any(name.startswith("context_hub/") for name in wheel_names)
+          assert any(name.endswith("/LICENSE") for name in wheel_names)
+          assert any(name.endswith("/entry_points.txt") for name in wheel_names)
+          assert not any(any(token in name.lower() for token in forbidden) for name in wheel_names + sdist_names)
+          PY
+      - name: Upload release candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: context-hub-${{ github.ref_name }}
+          path: dist/*
