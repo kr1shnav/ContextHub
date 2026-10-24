@@ -23,14 +23,17 @@ from .proposals import ProposalGenerator, ProposalLimits
 from .proposals import ChangeProposal, ProposedFileDiff
 from .validation import CheckKind, ProposalValidator, ValidationCheck, ValidationRequest
 from .benchmark import load_dataset, summarize, verify_expected_evidence
+from .evaluation import evaluate_dataset, index_metadata, render_summary
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
 mcp_app = typer.Typer(name="mcp", help="Model Context Protocol server commands.")
 agent_app = typer.Typer(name="agent", help="Read-only agent planning and proposal commands.")
+eval_app = typer.Typer(name="eval", help="Deterministic benchmark evaluation commands.")
 app.add_typer(provider_app)
 app.add_typer(mcp_app)
 app.add_typer(agent_app)
+app.add_typer(eval_app)
 console = Console()
 
 
@@ -244,6 +247,36 @@ def benchmark_validate(dataset: Annotated[Path | None, typer.Option("--dataset",
             console.print(f"[red]Error: {error}[/red]")
         raise typer.Exit(code=1)
     console.print("[green]Dataset and expected repository evidence are valid.[/green]")
+
+
+@eval_app.command("retrieval")
+def eval_retrieval(k: Annotated[list[int], typer.Option("--k", min=1, help="Positive cutoff; repeat for multiple K values.")] = [1, 3, 5],
+                   json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+                   output: Annotated[Path | None, typer.Option("--output", help="Write JSON results to this file.")] = None,
+                   dataset: Annotated[Path | None, typer.Option("--dataset", help="Benchmark JSON path.")] = None) -> None:
+    """Evaluate retrieval against the offline benchmark dataset."""
+    root = Path.cwd()
+    database_path = root / ".context-hub" / "index.db"
+    if not database_path.is_file():
+        console.print("No Context Hub index found. Run `ctx index` first.")
+        raise typer.Exit(code=1)
+    try:
+        loaded = load_dataset(dataset)
+        errors = verify_expected_evidence(loaded, root)
+        if errors:
+            raise ValueError("; ".join(errors))
+        report = evaluate_dataset(loaded, RetrievalEngine(database_path), k, index_metadata=index_metadata(database_path, root))
+        if output:
+            output.write_text(report.to_json() + "\n", encoding="utf-8")
+    except Exception as exc:
+        console.print(f"[red]Retrieval evaluation failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(report.to_json())
+    else:
+        console.print(render_summary(report))
+        if output:
+            console.print(f"JSON results: {output}")
 
 
 @provider_app.command("status")
