@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import get_args, get_type_hints
 import tomllib
 
 from typer.testing import CliRunner
@@ -26,11 +27,9 @@ def test_cli_entrypoint_version_is_available_without_provider_configuration():
 
 
 def test_offline_pack_command_exposes_no_llm_option():
-    result = CliRunner().invoke(
-        app,
-        ["pack", "--help"],
-        color=False,
-        terminal_width=120,
-    )
-    assert result.exit_code == 0
-    assert "--no-llm" in result.stdout
+    command = next(command for command in app.registered_commands if command.name == "pack")
+    annotation = get_type_hints(command.callback, include_extras=True)["no_llm"]
+    value_type, option_info = get_args(annotation)
+
+    assert value_type is bool
+    assert "--no-llm" in (option_info.default, *option_info.param_decls)
