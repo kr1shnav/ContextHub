@@ -24,6 +24,7 @@ from .proposals import ChangeProposal, ProposedFileDiff
 from .validation import CheckKind, ProposalValidator, ValidationCheck, ValidationRequest
 from .benchmark import load_dataset, summarize, verify_expected_evidence
 from .evaluation import evaluate_dataset, index_metadata, render_summary
+from .packet_evaluation import evaluate_packets, render_packet_summary
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -275,6 +276,40 @@ def eval_retrieval(k: Annotated[list[int], typer.Option("--k", min=1, help="Posi
         console.print(report.to_json())
     else:
         console.print(render_summary(report))
+        if output:
+            console.print(f"JSON results: {output}")
+
+
+@eval_app.command("packets")
+def eval_packets(max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
+                 max_tokens: Annotated[int, typer.Option("--max-tokens", min=1)] = 6000,
+                 max_characters: Annotated[int, typer.Option("--max-characters", min=1)] = 24000,
+                 json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+                 output: Annotated[Path | None, typer.Option("--output", help="Write JSON results to this file.")] = None,
+                 dataset: Annotated[Path | None, typer.Option("--dataset", help="Benchmark JSON path.")] = None) -> None:
+    """Evaluate actual context packets against the offline benchmark dataset."""
+    root = Path.cwd()
+    database_path = root / ".context-hub" / "index.db"
+    if not database_path.is_file():
+        console.print("No Context Hub index found. Run `ctx index` first.")
+        raise typer.Exit(code=1)
+    try:
+        loaded = load_dataset(dataset)
+        errors = verify_expected_evidence(loaded, root)
+        if errors:
+            raise ValueError("; ".join(errors))
+        budget = ContextBudget(max_files=max_files, max_tokens=max_tokens, max_characters=max_characters)
+        builder = ContextOrchestrator(root, MockProvider(), budget=budget)
+        report = evaluate_packets(loaded, builder, budget, index_metadata=index_metadata(database_path, root))
+        if output:
+            output.write_text(report.to_json() + "\n", encoding="utf-8")
+    except Exception as exc:
+        console.print(f"[red]Packet evaluation failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(report.to_json())
+    else:
+        console.print(render_packet_summary(report))
         if output:
             console.print(f"JSON results: {output}")
 
