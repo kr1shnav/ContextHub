@@ -6,8 +6,7 @@ from typer.testing import CliRunner
 from context_hub.cli import app
 from context_hub.orchestration import ContextBudget, ContextOrchestrator
 from context_hub.providers import MockProvider
-from context_hub.retrieval import RetrievalEngine
-from context_hub.retrieval.query import RetrievalQuery
+from context_hub.retrieval import RetrievalEngine, RetrievalQuery
 from context_hub.storage import index_repository
 
 

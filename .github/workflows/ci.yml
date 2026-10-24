@@ -70,4 +70,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Audit locked dependencies
-        run: uv run --locked --with pip-audit==2.9.0 pip-audit --strict
+        run: uv run --locked --with pip-audit==2.9.0 pip-audit --strict --skip-editable
