@@ -4,6 +4,7 @@ import json
 import time
 
 import httpx
+import re
 
 from .base import LLMProvider, ProviderError
 from .config import ProviderSettings
@@ -86,6 +87,9 @@ class NVIDIAProvider(LLMProvider):
                 detail = error
         except (ValueError, TypeError):
             detail = response.text
-        detail = " ".join(detail.split())[:300]
+        detail = " ".join(detail.split())
+        detail = re.sub(r"(?i)(\b(?:api[_-]?key|access[_-]?key|secret|password|token)\b\s*[:=]\s*)([^\s]+)", r"\1<redacted>", detail)
+        detail = re.sub(r"(?i)(\bBearer\s+)[^\s]+", r"\1<redacted>", detail)
+        detail = detail[:300]
         suffix = f" {detail}" if detail else ""
         return f"NVIDIA HTTP {response.status_code}: {fallback}{suffix}"

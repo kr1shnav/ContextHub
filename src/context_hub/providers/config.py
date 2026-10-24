@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from pydantic import BaseModel, Field
+from urllib.parse import urlparse
+from pydantic import BaseModel, Field, field_validator
 
 
 class ProviderSettings(BaseModel):
@@ -14,6 +15,17 @@ class ProviderSettings(BaseModel):
     max_tokens: int = Field(default=800, gt=0)
     max_context_chars: int = Field(default=12000, gt=0)
     retries: int = Field(default=2, ge=0, le=5)
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("base_url must be an absolute HTTP(S) URL")
+        if parsed.username or parsed.password:
+            raise ValueError("base_url must not contain embedded credentials")
+        return value.rstrip("/")
+
 
     @classmethod
     def from_env(cls) -> "ProviderSettings":

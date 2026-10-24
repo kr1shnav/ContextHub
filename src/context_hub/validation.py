@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import subprocess
 import sys
+import re
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,14 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from .mcp_server import _safe_repository_file
 from .proposals import ChangeProposal, ProposalGenerator, ProposalLimits
+
+_SECRET_ASSIGNMENT = re.compile(r"(?im)(\b(?:[a-z0-9]+[_-])?(?:api[_-]?key|access[_-]?key|secret|password|token)\b\s*[:=]\s*)([\"']?)[^\s\"']+")
+_BEARER = re.compile(r"(?i)(\bBearer\s+)[^\s]+")
+
+
+def _redact_output(value: str) -> str:
+    value = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", value)
+    return _BEARER.sub(r"\1<redacted>", value)
 
 
 class ValidationStatus(StrEnum):
@@ -96,7 +105,7 @@ class ProposalValidator:
             command = [sys.executable, "-m", "py_compile", target.relative_to(self.root).as_posix()]
         try:
             completed = subprocess.run(command, cwd=self.root, shell=False, capture_output=True, text=True, timeout=timeout, check=False)
-            output = ((completed.stdout or "") + (completed.stderr or ""))[:max_output]
+            output = _redact_output((completed.stdout or "") + (completed.stderr or ""))[:max_output]
             return CheckResult(kind=check.kind, status=ValidationStatus.PASSED if completed.returncode == 0 else ValidationStatus.FAILED, exit_code=completed.returncode, summary="Command completed successfully." if completed.returncode == 0 else "Command returned a nonzero exit code.", output=output)
         except subprocess.TimeoutExpired:
             return CheckResult(kind=check.kind, status=ValidationStatus.FAILED, summary="Command timed out; no result is treated as passing.")

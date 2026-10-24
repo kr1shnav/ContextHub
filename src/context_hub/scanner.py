@@ -19,7 +19,9 @@ def ignored(path: Path, root: Path, gitignore: list[str]) -> bool:
     rel = path.relative_to(root).as_posix()
     if any(part in DEFAULT_IGNORED for part in path.relative_to(root).parts):
         return True
-    if path.name in SECRET_NAMES or path.name.startswith(".env.") or path.suffix.lower() in SECRET_SUFFIXES:
+    if (path.name in SECRET_NAMES or path.name.startswith(".env.") or
+            path.name.startswith("credentials.") or path.name.startswith("secrets.") or
+            path.suffix.lower() in SECRET_SUFFIXES):
         return True
     return any(rel == rule or rel.startswith(rule.rstrip("/") + "/") for rule in gitignore if rule and not rule.startswith("#"))
 
@@ -36,6 +38,9 @@ def scan_repository(root: Path) -> Repository:
             if ignored(path, root, rules):
                 continue
             try:
+                # Do not ingest a file symlink that resolves outside the repository.
+                if not path.resolve().is_relative_to(root):
+                    continue
                 raw = path.read_bytes()
                 if b"\0" in raw:
                     continue
