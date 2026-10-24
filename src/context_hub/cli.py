@@ -22,6 +22,7 @@ from .agent_harness import AgentHarness, AgentTask
 from .proposals import ProposalGenerator, ProposalLimits
 from .proposals import ChangeProposal, ProposedFileDiff
 from .validation import CheckKind, ProposalValidator, ValidationCheck, ValidationRequest
+from .benchmark import load_dataset, summarize, verify_expected_evidence
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -223,6 +224,26 @@ def search(query: Annotated[str, typer.Argument(help="Task or search query.")],
         console.print(f"   Estimated tokens: {result.estimated_tokens}")
         if explain:
             console.print("   Score breakdown: " + ", ".join(result.signals))
+
+
+@app.command("benchmark-validate")
+def benchmark_validate(dataset: Annotated[Path | None, typer.Option("--dataset", help="Benchmark JSON path.")] = None,
+                       repository: Annotated[Path, typer.Option("--repository", help="Repository to verify expected evidence against.")] = Path(".")) -> None:
+    """Validate and summarize the offline retrieval benchmark dataset."""
+    try:
+        loaded = load_dataset(dataset)
+        errors = verify_expected_evidence(loaded, repository)
+    except Exception as exc:
+        console.print(f"[red]Benchmark validation failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    data = summarize(loaded)
+    console.print(f"Benchmark: {data['name']} (v{data['version']})")
+    console.print(f"Tasks: {data['tasks']} | Ambiguous: {data['ambiguous']}")
+    if errors:
+        for error in errors:
+            console.print(f"[red]Error: {error}[/red]")
+        raise typer.Exit(code=1)
+    console.print("[green]Dataset and expected repository evidence are valid.[/green]")
 
 
 @provider_app.command("status")
