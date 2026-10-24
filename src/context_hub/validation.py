@@ -19,8 +19,8 @@ _BEARER = re.compile(r"(?i)(\bBearer\s+)[^\s]+")
 
 
 def _redact_output(value: str) -> str:
-    value = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", value)
-    return _BEARER.sub(r"\1<redacted>", value)
+    value = _BEARER.sub(r"\1<redacted>", value)
+    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", value)
 
 
 class ValidationStatus(StrEnum):
@@ -105,7 +105,7 @@ class ProposalValidator:
             command = [sys.executable, "-m", "py_compile", target.relative_to(self.root).as_posix()]
         try:
             completed = subprocess.run(command, cwd=self.root, shell=False, capture_output=True, text=True, timeout=timeout, check=False)
-            output = _redact_output((completed.stdout or "") + (completed.stderr or ""))[:max_output]
+            output = _redact_output((completed.stdout or "") + "\n" + (completed.stderr or ""))[:max_output]
             return CheckResult(kind=check.kind, status=ValidationStatus.PASSED if completed.returncode == 0 else ValidationStatus.FAILED, exit_code=completed.returncode, summary="Command completed successfully." if completed.returncode == 0 else "Command returned a nonzero exit code.", output=output)
         except subprocess.TimeoutExpired:
             return CheckResult(kind=check.kind, status=ValidationStatus.FAILED, summary="Command timed out; no result is treated as passing.")

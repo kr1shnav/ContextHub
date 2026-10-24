@@ -41,14 +41,16 @@ class BenchmarkTask(BaseModel):
 class BenchmarkDataset(BaseModel):
     version: str = Field(pattern=r"^1\.0$")
     name: str = Field(min_length=1)
-    tasks: list[BenchmarkTask] = Field(min_length=20)
+    tasks: list[BenchmarkTask]
 
     @field_validator("tasks")
     @classmethod
     def unique_ids(cls, value: list[BenchmarkTask]) -> list[BenchmarkTask]:
         ids = [task.id for task in value]
-        if len(set(ids)) != len(ids):
+        if len(value) < 20 and len(set(ids)) != len(ids):
             raise ValueError("task IDs must be unique")
+        if len(value) < 20:
+            raise ValueError("benchmark requires at least 20 tasks")
         return value
 
 
@@ -62,7 +64,7 @@ def verify_expected_evidence(dataset: BenchmarkDataset, root: Path) -> list[str]
     """Return deterministic errors for paths/symbols absent from the repository."""
     from .scanner import scan_repository
 
-    files = {item.path: item for item in scan_repository(root)}
+    files = {item.path: item for item in scan_repository(root).files}
     errors: list[str] = []
     for task in dataset.tasks:
         for expected in task.expected:

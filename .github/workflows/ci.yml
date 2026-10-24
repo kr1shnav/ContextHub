@@ -70,4 +70,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Audit locked dependencies
-        run: uv run --locked --with pip-audit==2.9.0 pip-audit --strict --skip-editable
+        run: |
+          uv export --locked --format requirements-txt --no-emit-project > "$RUNNER_TEMP/requirements.txt"
+          uv run --locked --no-project --with pip-audit==2.9.0 pip-audit --strict -r "$RUNNER_TEMP/requirements.txt"

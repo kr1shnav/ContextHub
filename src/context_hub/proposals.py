@@ -77,9 +77,15 @@ class ProposalGenerator:
         total = sum(len(item.patch) for item in proposal.files)
         if total > self.limits.max_patch_chars: raise ValueError("proposal exceeds patch-size limit")
         evidence_paths = {item.path for item in packet.files}
+        evidence_by_path = {item.path: item for item in packet.files}
         for item in proposal.files:
-            target = _safe_repository_file(self.root, item.path)
-            if not target.is_file(): raise ValueError("proposal target must be an existing file")
+            target = self.root / item.path
+            if not target.resolve().is_relative_to(self.root):
+                raise ValueError("proposal target must stay inside repository")
+            if not target.is_file():
+                evidence = evidence_by_path.get(item.path)
+                if evidence is None or evidence.content is None:
+                    raise ValueError("proposal target must be an existing file or supplied as source evidence")
             if item.path not in evidence_paths:
                 proposal.assumptions.append(f"Source evidence for {item.path} was not in the selected context.")
             self._validate_diff(item.path, item.patch, target)

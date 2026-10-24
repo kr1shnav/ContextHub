@@ -113,25 +113,33 @@ def build_code_graph(repository: Repository) -> CodeGraph:
         file_id = f"file:{item.path}"
         graph.add_node(GraphNode(file_id, NodeType.FILE, item.path, path=item.path,
                                  metadata={"language": item.language, "size": item.size, "content_hash": item.content_hash}))
+        graph.add_node(GraphNode(item.path, NodeType.FILE, item.path, path=item.path,
+                                 metadata={"alias_for": file_id}))
         graph.add_edge(f"repository:{repository.root}", file_id, RelationshipType.CONTAINS)
         if not item.parsed:
             continue
         for symbol in item.parsed.symbols:
-            symbol_id = f"{item.path}:{symbol.name}"
+            legacy_symbol_id = f"{item.path}:{symbol.name}"
             symbol_id = f"symbol:{item.path}:{symbol.name}:{symbol.start_line}"
             kind = NodeType(symbol.kind.value) if symbol.kind.value in NodeType._value2member_map_ else NodeType.SYMBOL
             graph.add_node(GraphNode(symbol_id, kind, symbol.name, path=item.path, symbol_id=symbol_id,
                                      metadata=symbol.model_dump(exclude={"file", "name"})))
+            graph.add_node(GraphNode(legacy_symbol_id, kind, symbol.name, path=item.path, symbol_id=symbol_id,
+                                     metadata={"alias_for": symbol_id}))
             graph.add_edge(file_id, symbol_id, RelationshipType.DEFINES)
+            graph.add_edge(item.path, legacy_symbol_id, RelationshipType.DEFINES)
             if symbol.parent:
                 parent_id = next((n.id for n in graph.node_data.values() if n.path == item.path and n.name == symbol.parent), file_id)
                 graph.add_edge(parent_id, symbol_id, RelationshipType.DEFINES)
         for imported in item.parsed.imports:
             target = _resolve_import(item.path, imported.name, files)
             target_id = f"file:{target}" if target else f"external:{imported.name}"
+            legacy_target = target if target else imported.name
             if not target:
                 graph.add_node(GraphNode(target_id, NodeType.EXTERNAL, imported.name, metadata={"module": imported.name}))
             graph.add_edge(file_id, target_id, RelationshipType.IMPORTS,
+                           metadata={"resolved": target is not None, "import": imported.name}, confidence=1.0)
+            graph.add_edge(item.path, legacy_target, RelationshipType.IMPORTS,
                            metadata={"resolved": target is not None, "import": imported.name}, confidence=1.0)
             graph.add_edge(file_id, target_id, RelationshipType.DEPENDS_ON,
                            metadata={"resolved": target is not None}, confidence=1.0)

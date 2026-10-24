@@ -78,6 +78,10 @@ class AgentEvaluationReport(BaseModel):
     aggregate: dict[str, float | int | None]
     cases: list[AgentCaseResult]
 
+    @property
+    def failed_cases(self) -> int:
+        return int(self.aggregate.get("failed_cases") or 0)
+
     def to_json(self) -> str:
         return self.model_dump_json(indent=2)
 

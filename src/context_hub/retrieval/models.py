@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class RetrievalConfig(BaseModel):
@@ -33,8 +33,17 @@ class RetrievalResult(BaseModel):
     symbol: str | None = None
     score: float
     reasons: list[str] = Field(default_factory=list)
+    reason: str | None = None
     signals: list[str] = Field(default_factory=list)
     metadata: dict[str, object] = Field(default_factory=dict)
     estimated_characters: int = 0
     estimated_tokens: int = 0
+
+    @model_validator(mode="after")
+    def synchronize_reason_fields(self) -> "RetrievalResult":
+        if self.reason and not self.reasons:
+            self.reasons = [self.reason]
+        elif self.reasons and not self.reason:
+            self.reason = "; ".join(self.reasons)
+        return self
 

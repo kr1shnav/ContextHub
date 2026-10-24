@@ -7,6 +7,17 @@ from .models import RetrievalConfig, RetrievalQuery, RetrievalResult
 from .query import normalize_query, tokenize
 
 
+def _tokens_match(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    common = 0
+    for a, b in zip(left, right):
+        if a != b:
+            break
+        common += 1
+    return common >= 4 and abs(len(left) - len(right)) <= 3
+
+
 class RetrievalEngine:
     """Search indexed metadata without reading or parsing repository source."""
     def __init__(self, database_path: Path, config: RetrievalConfig | None = None):
@@ -33,7 +44,7 @@ class RetrievalEngine:
         for file in files:
             path_tokens = set(tokenize(file["relative_path"]))
             import_tokens = set(tokenize(" ".join(row["imported_name"] for row in imports if row["file_id"] == file["id"])) )
-            matched = set(terms) & (path_tokens | import_tokens)
+            matched = {term for term in terms if any(_tokens_match(term, candidate) for candidate in path_tokens | import_tokens)}
             score = min(1.0, len(matched) / max(1, len(terms)) * self.config.path_weight)
             signals = ["path_match"] if matched else []
             reasons = [f"Path/import token match: {', '.join(sorted(matched))}"] if matched else []

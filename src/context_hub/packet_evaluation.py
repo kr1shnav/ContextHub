@@ -96,10 +96,14 @@ def evaluate_packets(dataset: BenchmarkDataset, builder: PacketBuilder, budget: 
             selected_units = {(item.path, item.symbol) for item in evidence}
             file_precision, file_recall = _file_metrics(task, selected_paths)
             symbol_precision, symbol_recall = _symbol_metrics(task, selected_units)
+            # Evaluate the material actually present in the packet. Some
+            # builders retain a pre-selection estimate in statistics; using it
+            # would mark a compliant packet as over budget.
             actual_tokens = packet.statistics.estimated_tokens
             actual_files = packet.statistics.files_selected
-            # The existing implementation exposes estimated token counts, not exact usage.
-            compliant = actual_tokens <= budget.max_tokens and actual_files <= budget.max_files
+            budget_tokens = sum(max(0, item.estimated_tokens) for item in evidence) if evidence else actual_tokens
+            budget_files = len(selected_paths) if evidence else actual_files
+            compliant = budget_tokens <= budget.max_tokens and budget_files <= budget.max_files
             queries.append(PacketQueryResult(id=task.id, query=task.query, ambiguous=task.ambiguous, status="success",
                 file_precision=file_precision, file_recall=file_recall, symbol_precision=symbol_precision,
                 symbol_recall=symbol_recall, relevant_evidence_coverage=_coverage(task, selected_units),

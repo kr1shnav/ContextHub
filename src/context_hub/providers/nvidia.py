@@ -54,7 +54,10 @@ class NVIDIAProvider(LLMProvider):
                         continue
                     response.raise_for_status()
                     data = response.json()
-                    choice = data["choices"][0]
+                    choices = data.get("choices") if isinstance(data, dict) else None
+                    if not isinstance(choices, list) or not choices:
+                        raise ValueError("response choices are missing")
+                    choice = choices[0]
                     content = choice["message"]["content"]
                     if not isinstance(content, str):
                         raise ValueError("response content is not text")

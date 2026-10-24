@@ -66,8 +66,8 @@ def _safe_repository_file(root: Path, value: str) -> Path:
 def _redact_content(content: str | None) -> str | None:
     if content is None:
         return None
-    redacted = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", content)
-    return _BEARER.sub(r"\1<redacted>", redacted)
+    redacted = _BEARER.sub(r"\1<redacted>", content)
+    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", redacted)
 
 
 def _index_path(root: Path) -> Path:
