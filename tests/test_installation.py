@@ -26,6 +26,11 @@ def test_cli_entrypoint_version_is_available_without_provider_configuration():
 
 
 def test_offline_pack_command_exposes_no_llm_option():
-    result = CliRunner().invoke(app, ["pack", "--help"])
+    result = CliRunner().invoke(
+        app,
+        ["pack", "--help"],
+        color=False,
+        terminal_width=80,
+    )
     assert result.exit_code == 0
     assert "--no-llm" in result.stdout
