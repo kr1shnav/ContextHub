@@ -163,11 +163,11 @@ A context packet is intended to prepare information for downstream reasoning; it
 
 ## Installation
 
-Context Hub's development workflow uses Python and `uv`.
+Context Hub uses Python and `uv` for installation and environment management.
 
 ### Prerequisites
 
-- Python compatible with the project's declared requirements.
+- Python 3.12 or newer.
 - [`uv`](https://docs.astral.sh/uv/) for dependency and environment management.
 - A local checkout of the Context Hub repository.
 
@@ -180,13 +180,43 @@ git clone <YOUR_REPOSITORY_URL>
 cd <YOUR_REPOSITORY_DIRECTORY>
 ```
 
-Install the project dependencies:
+Install runtime dependencies and the package into a project environment:
 
 ```bash
 uv sync
 ```
 
-**Note:** Replace the repository placeholders with the actual Git URL and directory name. Use the Python version and setup requirements declared by the project.
+For tests without changing the runtime dependency set, ask `uv` to provide
+pytest for that command:
+
+```bash
+uv run --with pytest pytest
+```
+
+The package metadata registers `ctx` as `context_hub.cli:app`. Build a wheel
+with `uv build` when Hatchling is available. Run the following offline
+quickstart from the repository to analyze:
+
+```bash
+uv run ctx init .
+uv run ctx index .
+uv run ctx search "Explain how context packets are assembled" --limit 5
+uv run ctx inspect src/context_hub/orchestration/orchestrator.py
+uv run ctx pack "Explain how ContextOrchestrator builds a context packet" --no-llm
+```
+
+`ctx init` creates `.context-hub/metadata.json`; `ctx index` creates or updates
+`.context-hub/index.db`. The `--no-llm` packet path uses the deterministic mock
+provider and needs no credentials or network. Provider-backed commands include
+`ctx analyze`, `ctx agent-plan`, and `ctx pack` without `--no-llm`.
+
+Provider settings come from environment variables. Select `nebius` or `nvidia`
+with `CONTEXT_HUB_PROVIDER`; set `NEBIUS_API_KEY` or `NVIDIA_API_KEY` as
+appropriate, plus the matching `*_MODEL` and `*_BASE_URL` overrides if needed.
+General overrides are `CONTEXT_HUB_TIMEOUT`, `CONTEXT_HUB_TEMPERATURE`,
+`CONTEXT_HUB_MAX_TOKENS`, `CONTEXT_HUB_MAX_CONTEXT_CHARS`, and
+`CONTEXT_HUB_RETRIES`. Never commit keys. `uv run ctx provider status` reports
+only whether a key is configured, never its value.
 
 ## CLI Reference
 
@@ -199,7 +229,18 @@ Run the commands below from the project root.
 | Command | Purpose |
 |---|---|
 | `uv run ctx --help` | Display the CLI help and available commands. |
-| `uv run ctx --version` | Display the version, if version support is implemented. |
+| `uv run ctx version` | Print the Context Hub version. |
+
+### Repository workflow
+
+| Command | Purpose |
+|---|---|
+| `uv run ctx init .` | Create local Context Hub metadata. |
+| `uv run ctx index .` | Create or incrementally update the SQLite index. |
+| `uv run ctx search "query"` | Search indexed repository context. |
+| `uv run ctx inspect path/to/file.py` | Inspect file metadata, symbols, and imports. |
+| `uv run ctx symbols path/to/file.py` | List parsed symbols. |
+| `uv run ctx status .` | Show project and index status. |
 
 ### Context packing
 
@@ -250,7 +291,7 @@ These commands support the development workflow; they are not necessarily `ctx` 
 |---|---|
 | `uv sync` | Install dependencies declared by the project. |
 | `uv run ctx --help` | Inspect the CLI and verify that its entry point is available. |
-| `uv run pytest` | Run the test suite if the project uses pytest. |
+| `uv run --with pytest pytest` | Run the test suite with pytest supplied for the command. |
 
 **Command availability:** `ctx pack` is the documented primary workflow. Confirm optional commands such as `--version` and any additional subcommands against `uv run ctx --help` before relying on them.
 
@@ -264,7 +305,7 @@ A typical development workflow is:
 4. Inspect the generated packet.
 5. Investigate retrieval and evidence-selection behavior.
 6. Verify context budgeting and packet assembly.
-7. Run the available automated tests.
+7. Run the available automated tests with `uv run --with pytest pytest`.
 8. Update documentation when command behavior or output formats change.
 
 ### Example investigation task
@@ -298,7 +339,6 @@ Testing should cover the components that exist in the implementation, including:
 
 This list describes recommended coverage, not a claim that every test is already present.
 
-<<<<<<< HEAD
 Phase 9.2 adds `ctx agent-plan`, a read-only repository-aware planner. It
 reuses the Context Orchestrator packet and the configured provider, then
 validates a bounded `RepositoryPlan`. Evidence-backed file and symbol names
@@ -313,10 +353,7 @@ Example:
 ctx agent-plan "Add retry handling to the indexer" --json
 ```
 
-## Hackathon direction
-=======
 ## Design Principles
->>>>>>> 09d55a68db6cc0c76580a3f8eb601ce842d3d4f0
 
 ### Task-oriented context
 
