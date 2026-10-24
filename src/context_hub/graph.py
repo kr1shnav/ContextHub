@@ -79,13 +79,13 @@ class CodeGraph:
     def stats(self) -> dict[str, int]:
         return {
             "repositories": sum(n.type == NodeType.REPOSITORY for n in self.node_data.values()),
-            "files": sum(n.type == NodeType.FILE for n in self.node_data.values()),
-            "modules": sum(n.type == NodeType.MODULE for n in self.node_data.values()),
-            "symbols": sum(n.type in {NodeType.CLASS, NodeType.FUNCTION, NodeType.METHOD, NodeType.SYMBOL} for n in self.node_data.values()),
-            "imports": sum(e.kind == RelationshipType.IMPORTS for e in self.edges),
-            "dependencies": sum(e.kind == RelationshipType.DEPENDS_ON for e in self.edges),
-            "edges": len(self.edges),
-            "unresolved_imports": sum(e.kind == RelationshipType.IMPORTS and not e.metadata.get("resolved", True) for e in self.edges),
+            "files": sum(n.type == NodeType.FILE and n.id.startswith("file:") for n in self.node_data.values()),
+            "modules": sum(n.type == NodeType.MODULE and n.id.startswith("symbol:") for n in self.node_data.values()),
+            "symbols": sum(n.type in {NodeType.CLASS, NodeType.FUNCTION, NodeType.METHOD, NodeType.SYMBOL} and n.id.startswith("symbol:") for n in self.node_data.values()),
+            "imports": sum(e.kind == RelationshipType.IMPORTS and e.source.startswith("file:") for e in self.edges),
+            "dependencies": sum(e.kind == RelationshipType.DEPENDS_ON and e.source.startswith("file:") for e in self.edges),
+            "edges": sum(e.source.startswith("file:") or e.source.startswith("repository:") for e in self.edges),
+            "unresolved_imports": sum(e.kind == RelationshipType.IMPORTS and e.source.startswith("file:") and not e.metadata.get("resolved", True) for e in self.edges),
         }
 
     def neighbors(self, node: str, *, max_depth: int = 1) -> set[str]:
