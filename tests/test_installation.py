@@ -30,7 +30,7 @@ def test_offline_pack_command_exposes_no_llm_option():
         app,
         ["pack", "--help"],
         color=False,
-        terminal_width=80,
+        terminal_width=120,
     )
     assert result.exit_code == 0
     assert "--no-llm" in result.stdout
