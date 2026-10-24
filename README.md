@@ -323,7 +323,7 @@ Run the project's tests using the test runner configured by the repository.
 For a project using pytest:
 
 ```bash
-uv run pytest
+uv run --locked --with pytest==8.3.5 pytest
 ```
 
 Testing should cover the components that exist in the implementation, including:
