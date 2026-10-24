@@ -28,6 +28,7 @@ from .evaluation import evaluate_dataset, index_metadata, render_summary
 from .packet_evaluation import evaluate_packets, render_packet_summary
 from .performance import run_performance_benchmark, render_performance_summary, validate_repeats
 from .agent_evaluation import AgentTaskDataset, evaluate_agent_dataset, render_agent_summary
+from .unified_evaluation import SUITES, run_unified_evaluation, render_unified_summary
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -379,6 +380,40 @@ def eval_agent(repository: Annotated[Path, typer.Option("--repository", help="Re
         console.print(render_agent_summary(report))
         if output:
             console.print(f"JSON results: {output}")
+
+
+@eval_app.command("all")
+def eval_all(repository: Annotated[Path, typer.Option("--repository", help="Repository to evaluate.")] = Path("."),
+             suite: Annotated[list[str], typer.Option("--suite", help="Suite to run; repeat to select several.")] = list(SUITES),
+             baseline: Annotated[Path | None, typer.Option("--baseline", help="Previously saved unified JSON report.")] = None,
+             save_baseline: Annotated[Path | None, typer.Option("--save-baseline", help="Save this unified report as a baseline.")] = None,
+             k: Annotated[list[int], typer.Option("--k", min=1, help="Retrieval cutoff; repeat for multiple K values.")] = [1, 3, 5],
+             repeats: Annotated[int, typer.Option("--repeats", min=1, max=100)] = 3,
+             warmups: Annotated[int, typer.Option("--warmups", min=0, max=20)] = 1,
+             max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
+             max_tokens: Annotated[int, typer.Option("--max-tokens", min=1)] = 6000,
+             min_retrieval_precision: Annotated[float | None, typer.Option("--min-retrieval-precision", min=0, max=1)] = None,
+             min_packet_coverage: Annotated[float | None, typer.Option("--min-packet-coverage", min=0, max=1)] = None,
+             max_budget_violation_rate: Annotated[float | None, typer.Option("--max-budget-violation-rate", min=0, max=1)] = None,
+             max_latency_regression: Annotated[float | None, typer.Option("--max-latency-regression", min=0)] = None,
+             json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+             output: Annotated[Path | None, typer.Option("--output", help="Write JSON report to this file.")] = None) -> None:
+    """Run selected offline evaluation suites and optional regression gates."""
+    try:
+        gates = {key: value for key, value in {"min_retrieval_precision": min_retrieval_precision, "min_packet_coverage": min_packet_coverage, "max_budget_violation_rate": max_budget_violation_rate, "max_latency_regression": max_latency_regression}.items() if value is not None}
+        report = run_unified_evaluation(repository, suites=suite, baseline=baseline, repeats=repeats, warmups=warmups, ks=k,
+            budget=ContextBudget(max_files=max_files, max_tokens=max_tokens), gates=gates)
+        if save_baseline:
+            save_baseline.write_text(report.to_json() + "\n", encoding="utf-8")
+        if output:
+            output.write_text(report.to_json() + "\n", encoding="utf-8")
+    except Exception as exc:
+        console.print(f"[red]Unified evaluation failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output: console.print(report.to_json())
+    else: console.print(render_unified_summary(report))
+    if report.quality_gate_failures or report.failures or report.blocked:
+        raise typer.Exit(code=1)
 
 
 @provider_app.command("status")
