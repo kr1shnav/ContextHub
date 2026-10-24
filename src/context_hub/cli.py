@@ -25,6 +25,7 @@ from .validation import CheckKind, ProposalValidator, ValidationCheck, Validatio
 from .benchmark import load_dataset, summarize, verify_expected_evidence
 from .evaluation import evaluate_dataset, index_metadata, render_summary
 from .packet_evaluation import evaluate_packets, render_packet_summary
+from .performance import run_performance_benchmark, render_performance_summary, validate_repeats
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -310,6 +311,41 @@ def eval_packets(max_files: Annotated[int, typer.Option("--max-files", min=1, ma
         console.print(report.to_json())
     else:
         console.print(render_packet_summary(report))
+        if output:
+            console.print(f"JSON results: {output}")
+
+
+@eval_app.command("performance")
+def eval_performance(repository: Annotated[Path, typer.Option("--repository", help="Repository to copy into isolated benchmark fixtures.")] = Path("."),
+                     repeats: Annotated[int, typer.Option("--repeats", min=1, max=100)] = 3,
+                     warmups: Annotated[int, typer.Option("--warmups", min=0, max=20)] = 1,
+                     max_files: Annotated[int, typer.Option("--max-files", min=1, max=100)] = 10,
+                     max_tokens: Annotated[int, typer.Option("--max-tokens", min=1)] = 6000,
+                     max_characters: Annotated[int, typer.Option("--max-characters", min=1)] = 24000,
+                     json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+                     output: Annotated[Path | None, typer.Option("--output", help="Write JSON results to this file.")] = None,
+                     dataset: Annotated[Path | None, typer.Option("--dataset", help="Benchmark JSON path.")] = None) -> None:
+    """Measure isolated indexing, retrieval, packet, and incremental performance."""
+    try:
+        validate_repeats(repeats, warmups)
+        source = repository.resolve()
+        if not source.is_dir():
+            raise ValueError(f"repository does not exist: {source}")
+        loaded = load_dataset(dataset)
+        errors = verify_expected_evidence(loaded, source)
+        if errors:
+            raise ValueError("; ".join(errors))
+        report = run_performance_benchmark(source, loaded, repeats=repeats, warmups=warmups,
+            budget=ContextBudget(max_files=max_files, max_tokens=max_tokens, max_characters=max_characters))
+        if output:
+            output.write_text(report.to_json() + "\n", encoding="utf-8")
+    except Exception as exc:
+        console.print(f"[red]Performance benchmark failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(report.to_json())
+    else:
+        console.print(render_performance_summary(report))
         if output:
             console.print(f"JSON results: {output}")
 
