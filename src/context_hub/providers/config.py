@@ -24,11 +24,13 @@ class ProviderSettings(BaseModel):
             "nebius": ("nvidia/nemotron-3-super-120b-a12b", "https://api.tokenfactory.nebius.com/v1", "NEBIUS"),
             "nvidia": ("nvidia/nemotron-3-super-120b-a12b", "https://integrate.api.nvidia.com/v1", "NVIDIA"),
         }
-        default_model, default_url, prefix = defaults.get(provider, (cls.model_fields["model"].default, cls.model_fields["base_url"].default, provider.upper()))
+        default_model, default_url, prefix = defaults.get(
+            provider, (cls.model_fields["model"].default, cls.model_fields["base_url"].default, provider.upper()))
         values["model"] = os.getenv(f"{prefix}_MODEL", default_model)
         values["base_url"] = os.getenv(f"{prefix}_BASE_URL", default_url)
         if os.getenv(f"{prefix}_API_KEY"):
             values["api_key"] = os.environ[f"{prefix}_API_KEY"]
         for env, field in (("CONTEXT_HUB_TIMEOUT", "timeout"), ("CONTEXT_HUB_TEMPERATURE", "temperature"), ("CONTEXT_HUB_MAX_TOKENS", "max_tokens"), ("CONTEXT_HUB_MAX_CONTEXT_CHARS", "max_context_chars"), ("CONTEXT_HUB_RETRIES", "retries")):
-            if os.getenv(env): values[field] = os.environ[env]
+            if os.getenv(env):
+                values[field] = os.environ[env]
         return cls(**values)
