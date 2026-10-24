@@ -48,6 +48,7 @@ Detailed guides:
 - [Continuous integration](docs/ci.md)
 - [Contributing](docs/contributing.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Offline end-to-end demo](docs/demo.md)
 
 ## Installation and quickstart
 
