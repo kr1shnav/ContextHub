@@ -1,131 +1,68 @@
-# Context Hub architecture
+# Architecture and data flow
 
-## Phase 9.2 repository-aware task planning
+Context Hub is a local repository-intelligence pipeline. The implementation is
+metadata-first: retrieval reads the SQLite index and does not read source files;
+packet assembly later reads only selected, safe repository files.
 
-`AgentHarness.plan_repository_task()` converts a non-empty coding task and the
-existing `ContextOrchestrator` `ContextPacket` into a bounded `RepositoryPlan`.
-The plan contains an objective, ordered steps, supported file/symbol evidence,
-step dependencies, risks, assumptions, unresolved questions, and validation
-commands proposed for later execution. Step identifiers must be unique and all
-dependencies must point to another step.
+## Repository scan and index
 
-Repository evidence is distinct from generated recommendations: a file or
-symbol may be named in a plan only when it appears in the supplied packet.
-Risks, assumptions, and validation commands are model-generated suggestions,
-not claims that those actions or facts have already occurred. Malformed JSON,
-invalid schemas, unsupported evidence, duplicate identifiers, and unknown
-dependencies are rejected. The phase remains read-only and performs no shell
-commands, file writes, patches, retries, or autonomous repairs.
+`scan_repository(root)` walks the root, excludes generated directories and
+sensitive names/suffixes, detects languages, and parses supported source files
+into `RepositoryFile`, `ParsedSource`, `Symbol`, and `Import` models. Files are
+sorted by repository-relative POSIX path.
 
-Example shape:
+`index_repository(root)` stores repositories, files, symbols, and imports in
+`.context-hub/index.db` through `IndexDatabase`. It compares content hashes and
+tracks new, modified, unchanged, deleted, and parsed counts in `IndexResult`.
+Updates are transactional. Run `ctx index` after changing the repository.
 
-```json
-{
-  "summary": "Add bounded planning",
-  "objective": "Turn a coding task into an evidence-backed plan",
-  "steps": [{"id": "inspect", "description": "Review src/app.py", "files": ["src/app.py"]}],
-  "evidence_files": ["src/app.py"],
-  "evidence_symbols": [],
-  "risks": ["The requested behavior may need a product decision"],
-  "assumptions": [],
-  "unresolved_questions": [],
-  "validation_commands": ["pytest"]
-}
-```
+## Code graph and retrieval
 
-## Phase 9.3 controlled tool execution
+`build_code_graph(repository)` creates repository/file/symbol/external nodes and
+IMPORTS, DEPENDS_ON, DEFINES, and CONTAINS relationships in an in-memory
+`CodeGraph`. `ctx graph`, `ctx deps`, and `ctx dependents` expose graph views.
 
-`ToolExecutor` is the sole execution boundary for the agent harness. Its
-registry contains only four read-only tools: repository search, file
-inspection, dependency retrieval, and bounded context-packet assembly. Each
-definition has a stable name, a Pydantic input schema, a description, and a
-`read_only` permission classification. Unknown names, extra arguments,
-invalid paths, sensitive files, symlink escapes, and malformed inputs are
-rejected before a handler runs.
+`RetrievalEngine.search(RetrievalQuery)` loads indexed files, symbols, and
+imports. It tokenizes the task, scores path/import matches and exact symbol
+matches, adds bounded dependency/dependent signals, and returns deterministic
+`RetrievalResult` objects sorted by score, path, and symbol. `ctx search` prints
+paths, symbols, scores, signals, reasons, and estimated tokens.
 
-The execution loop is bounded by a per-task call limit, per-call timeout, and
-serialized output limit. It returns structured success/failure results and
-sanitized history. Provider failures and internal exceptions become generic
-safe errors; credentials and raw exception text are not returned. The model
-cannot register tools, invoke recursion, run commands, write files, apply
-patches, or access the network. Phase 9.3 intentionally has no mutation
-capabilities; later phases must introduce separate approval and validation
-boundaries.
+## Context packet assembly
 
-## Phase 9.4 change proposals
+`ContextOrchestrator.build(task)` combines provider task analysis, indexed
+retrieval, repository scanning, graph expansion, evidence prioritization, and
+budgeting. The final `ContextPacket` contains only safe files that fit the
+configured `ContextBudget`; its `ContextStatistics` reports selected files and
+estimated tokens. `context_plan.candidate_paths` are candidates, not delivered
+evidence. `ctx pack --no-llm` uses `MockProvider`; normal packet analysis uses
+the configured provider.
 
-`ProposalGenerator` turns a task and bounded `ContextPacket` (optionally with a
-Phase 9.2 task plan) into a typed `ChangeProposal`. Each proposed file must be
-an existing, non-sensitive repository file and must contain a matching,
-structured unified diff. Absolute paths, traversal, symlink escapes,
-unsupported diff formats, duplicate files, nonexistent targets, malformed
-responses, and size/file-count limit violations are rejected.
+## MCP boundary
 
-`ctx agent propose` displays a reviewable summary. With `--output-dir`, it may
-save a patch artifact only inside a repository-contained destination; it never
-changes source files. Reviewers must inspect the rationale, assumptions, risks,
-source evidence, and validation recommendations, then apply the patch through
-their own approved workflow. Generating a proposal is explicitly different
-from applying it: this phase runs no shell commands, `git apply`, autonomous
-repair, or commit operation.
+`ctx mcp serve` starts `serve_stdio()`, which creates a FastMCP server and
+registers four read-only tools: `search_context`, `inspect_file`,
+`get_dependencies`, and `build_context_packet`. Path validation rejects
+absolute paths, traversal, symlink escapes, and sensitive files. Returned packet
+content is redacted for common secret assignments. The only implemented MCP
+transport is stdio.
 
-## Phase 9.5 validation and feedback
+## Agent harness
 
-`ProposalValidator` produces a typed `ValidationReport` for a saved proposal.
-Structural validation always runs first: patch format, existing target files,
-sensitive paths, repository boundaries, and proposal limits are checked before
-any executable check. The default is non-executing; requested checks are
-reported as `not_run`, never as passing.
+`AgentHarness` is planning-only. It builds a packet, asks the configured
+provider for validated `AgentModelResult` or `RepositoryPlan` data, bounds
+iterations, and returns `AgentOutcome`/`RepositoryPlan`. `ToolExecutor` exposes
+only bounded read-only search, inspect, dependency, and packet tools. It cannot
+run arbitrary shell commands or write files.
 
-Executable checks are limited to fixed schemas (`pytest` and Python
-`py_compile`) and require `--execute`. They use structured argument lists,
-`shell=False`, an explicit repository working directory, timeouts, and bounded
-output. Model output cannot select commands, environment variables, or working
-directories. Reports distinguish failed, not-run, and incomplete checks. Checks
-run against the current working tree; proposals are never applied, and there
-is no repair loop, dependency installation, network access, or commit.
+`ProposalGenerator` creates evidence-bounded `ChangeProposal` objects containing
+unified diffs for existing safe files. `ProposalValidator` performs structural
+checks first and executes only explicitly approved `pytest` or `py_compile`
+checks with `--execute`; proposals are never applied by these components.
 
-## Phase 9.1 agent harness
+## Trust boundaries
 
-The agent harness is a planning-only coordination layer over the existing
-provider and context services:
-
-```text
-AgentTask
-   |
-   v
-ContextOrchestrator.build() ---> bounded ContextPacket
-   |
-   v
-LLMProvider.generate() --------> strict AgentModelResult JSON
-   |                                  |
-   +-- complete ----------------------+
-   +-- continue --> bounded next iteration
-                                      |
-                                      v
-                               AgentOutcome
-```
-
-`AgentHarness` owns task validation, execution state, iteration limits, model
-response validation, and result reporting. `ContextOrchestrator` remains the
-only context assembly path, and `LLMProvider` remains the provider boundary.
-The harness does not select a model or duplicate retrieval and ranking logic.
-
-### Trust boundaries
-
-- Repository scanning and context assembly remain inside the existing
-  Context Hub root and packet budget.
-- The provider receives the task and bounded packet evidence through the
-  existing provider abstraction. Provider credentials remain in the launching
-  environment and are not copied into task or outcome models.
-- Model output is treated as untrusted data and must validate as the typed
-  `AgentModelResult` schema.
-- The harness returns plans and reports only. It has no shell, subprocess,
-  file-write, patch, or autonomous repair capability.
-
-### Explicit non-goals
-
-Phase 9.1 does not execute shell commands, modify repository files, apply
-patches, retry-and-repair failures autonomously, or expose a new MCP tool.
-Those capabilities require later Phase 9 milestones and separate approval,
-validation, and safety boundaries.
+Provider output is untrusted structured data and is validated with Pydantic.
+Credentials stay in the launching environment. Repository paths are resolved
+against the selected root. Evaluation and performance commands use mocks or
+temporary copies where applicable, and do not change the production index.
