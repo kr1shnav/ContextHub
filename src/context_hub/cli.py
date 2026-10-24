@@ -1,5 +1,6 @@
 """Command-line interface for Context Hub foundation commands."""
 
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -26,6 +27,7 @@ from .benchmark import load_dataset, summarize, verify_expected_evidence
 from .evaluation import evaluate_dataset, index_metadata, render_summary
 from .packet_evaluation import evaluate_packets, render_packet_summary
 from .performance import run_performance_benchmark, render_performance_summary, validate_repeats
+from .agent_evaluation import AgentTaskDataset, evaluate_agent_dataset, render_agent_summary
 
 app = typer.Typer(name="ctx", help="Context orchestration infrastructure for coding agents.")
 provider_app = typer.Typer(name="provider", help="Provider configuration commands.")
@@ -346,6 +348,35 @@ def eval_performance(repository: Annotated[Path, typer.Option("--repository", he
         console.print(report.to_json())
     else:
         console.print(render_performance_summary(report))
+        if output:
+            console.print(f"JSON results: {output}")
+
+
+@eval_app.command("agent")
+def eval_agent(repository: Annotated[Path, typer.Option("--repository", help="Repository used for objective path and symbol checks.")] = Path("."),
+               artifacts: Annotated[Path | None, typer.Option("--artifacts", help="JSON artifact bundle keyed by agent task ID.")] = None,
+               json_output: Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")] = False,
+               output: Annotated[Path | None, typer.Option("--output", help="Write JSON results to this file.")] = None,
+               dataset: Annotated[Path | None, typer.Option("--dataset", help="Agent benchmark JSON path.")] = None) -> None:
+    """Evaluate offline agent plans, proposals, and validation reports."""
+    try:
+        root = repository.resolve()
+        if not root.is_dir():
+            raise ValueError(f"repository does not exist: {root}")
+        loaded = AgentTaskDataset.load(dataset or Path(__file__).with_name("data") / "agent_benchmark_v1.json")
+        artifact_data = json.loads(artifacts.read_text(encoding="utf-8")) if artifacts else {}
+        if not isinstance(artifact_data, dict):
+            raise ValueError("artifact bundle must be a JSON object keyed by task ID")
+        report = evaluate_agent_dataset(loaded, root, artifacts=artifact_data)
+        if output:
+            output.write_text(report.to_json() + "\n", encoding="utf-8")
+    except Exception as exc:
+        console.print(f"[red]Agent evaluation failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    if json_output:
+        console.print(report.to_json())
+    else:
+        console.print(render_agent_summary(report))
         if output:
             console.print(f"JSON results: {output}")
 
