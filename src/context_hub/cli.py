@@ -432,7 +432,8 @@ def analyze(task: Annotated[str, typer.Argument(help="Developer task to analyze.
             json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Analyze a developer task with repository metadata and the configured provider."""
     try:
-        result = analyze_task(task, get_provider(), Path.cwd(), limit=limit)
+        settings = ProviderSettings.from_env()
+        result = analyze_task(task, get_provider(settings), Path.cwd(), settings=settings, limit=limit)
     except Exception as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
@@ -450,7 +451,9 @@ def pack(task: Annotated[str, typer.Argument(help="Developer task for context as
          json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Assemble a bounded, evidence-backed context packet."""
     try:
-        packet = ContextOrchestrator(Path.cwd(), MockProvider() if no_llm else get_provider(), budget=ContextBudget(max_files=max_files, max_tokens=max_tokens)).build(task)
+        settings = ProviderSettings.from_env()
+        provider = MockProvider() if no_llm else get_provider(settings)
+        packet = ContextOrchestrator(Path.cwd(), provider, settings=settings, budget=ContextBudget(max_files=max_files, max_tokens=max_tokens)).build(task)
     except Exception as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc

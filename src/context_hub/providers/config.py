@@ -30,11 +30,11 @@ class ProviderSettings(BaseModel):
     @classmethod
     def from_env(cls) -> "ProviderSettings":
         values: dict[str, object] = {}
-        provider = os.getenv("CONTEXT_HUB_PROVIDER", "nebius").lower()
+        provider = os.getenv("CONTEXT_HUB_PROVIDER", "nebius").strip().lower()
         values["provider"] = provider
         defaults = {
             "nebius": ("nvidia/nemotron-3-super-120b-a12b", "https://api.tokenfactory.nebius.com/v1", "NEBIUS"),
-            "nvidia": ("nvidia/nemotron-3-super-120b-a12b", "https://integrate.api.nvidia.com/v1", "NVIDIA"),
+            "nvidia": ("nvidia/nemotron-3.5-super-vl-120b-a12b", "https://integrate.api.nvidia.com/v1", "NVIDIA"),
         }
         default_model, default_url, prefix = defaults.get(
             provider, (cls.model_fields["model"].default, cls.model_fields["base_url"].default, provider.upper()))

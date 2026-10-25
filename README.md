@@ -101,6 +101,32 @@ reports only whether a key is configured, not its value. `ctx analyze`,
 `build_context_packet` may require credentials; indexing, search, inspect,
 dependencies, validation, and `--no-llm` packet flows are local/offline.
 
+### NVIDIA on Windows
+
+In Command Prompt, configure the NVIDIA provider and an exact model ID enabled
+for the API account:
+
+```bat
+set CONTEXT_HUB_PROVIDER=nvidia
+set NVIDIA_API_KEY=<set-outside-the-repository>
+set NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+set NVIDIA_MODEL=<exact-enabled-model-id>
+uv run ctx provider status
+uv run ctx analyze "Explain the project architecture, identify the main modules, and trace how data flows between them."
+```
+
+`NVIDIA_MODEL` is intentionally configurable; a model listed in a public
+catalog is not necessarily enabled for every account. Use NVIDIA's account/model
+catalog or dashboard to identify an enabled hosted model, then set its exact ID.
+`ctx provider status` is local-only and never prints the key.
+
+NVIDIA errors are reported without falling back to Nebius: `401` means the key
+is invalid, `403` means access is denied, `404` may indicate an unavailable
+model, account entitlement, or endpoint/model mismatch, `429` means rate or
+quota limiting, and `5xx` indicates an upstream NVIDIA failure. Check
+`NVIDIA_BASE_URL` and `NVIDIA_MODEL` for `404`; check account access for
+account-scoped 404s.
+
 ## MCP and evaluation
 
 Start the local MCP stdio server from the repository being analyzed:

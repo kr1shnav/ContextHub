@@ -45,7 +45,18 @@ class NVIDIAProvider(LLMProvider):
                     if response.status_code == 403:
                         raise ProviderError(self._error_message(response, "access denied for this NVIDIA API Catalog account or model."))
                     if response.status_code == 404:
-                        raise ProviderError(self._error_message(response, "model or endpoint was not found. Check NVIDIA_MODEL and NVIDIA_BASE_URL."))
+                        detail = self._safe_detail(response)
+                        if "not found for account" in detail.lower():
+                            raise ProviderError(
+                                self._error_message(
+                                    response,
+                                    f"NVIDIA returned an account-scoped 404 for model '{payload['model']}'. "
+                                    "This may indicate model availability, account entitlement, or an invalid "
+                                    "endpoint/model combination. Verify NVIDIA_MODEL and NVIDIA_BASE_URL, "
+                                    "and check the model is enabled for the account.",
+                                )
+                            )
+                        raise ProviderError(self._error_message(response, f"model '{payload['model']}' or endpoint was not found. Check NVIDIA_MODEL and NVIDIA_BASE_URL."))
                     if response.status_code == 429:
                         raise ProviderError(self._error_message(response, "rate limit or quota reached. Try again later."))
                     if 500 <= response.status_code <= 599:
@@ -80,6 +91,13 @@ class NVIDIAProvider(LLMProvider):
     @staticmethod
     def _error_message(response: httpx.Response, fallback: str) -> str:
         """Preserve status and a safe, bounded provider error without headers or credentials."""
+        detail = NVIDIAProvider._safe_detail(response)
+        suffix = f" {detail}" if detail else ""
+        return f"NVIDIA HTTP {response.status_code}: {fallback}{suffix}"
+
+    @staticmethod
+    def _safe_detail(response: httpx.Response) -> str:
+        """Extract bounded response detail without returning credentials."""
         detail = ""
         try:
             data = response.json()
@@ -93,6 +111,6 @@ class NVIDIAProvider(LLMProvider):
         detail = " ".join(detail.split())
         detail = re.sub(r"(?i)(\b(?:api[_-]?key|access[_-]?key|secret|password|token)\b\s*[:=]\s*)([^\s]+)", r"\1<redacted>", detail)
         detail = re.sub(r"(?i)(\bBearer\s+)[^\s]+", r"\1<redacted>", detail)
-        detail = detail[:300]
-        suffix = f" {detail}" if detail else ""
-        return f"NVIDIA HTTP {response.status_code}: {fallback}{suffix}"
+        detail = re.sub(r"(?i)(\baccount\b\s*)(['\"]?)[^\s,'\"]+\2", r"\1<redacted>", detail)
+        detail = re.sub(r"(?i)(\bfunction\b\s*)(['\"])[^'\"]+\2", r"\1<redacted>", detail)
+        return detail[:300]

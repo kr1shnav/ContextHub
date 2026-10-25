@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 from context_hub.providers import NVIDIAProvider, ProviderError, get_provider
 from context_hub.providers.config import ProviderSettings
@@ -8,6 +9,7 @@ from context_hub.analysis import analyze_task
 from context_hub.providers.models import GenerationResponse
 from pathlib import Path
 from context_hub.orchestration import ContextBudget, ContextOrchestrator
+from context_hub.cli import app
 
 
 def request() -> GenerationRequest:
@@ -47,6 +49,36 @@ def test_nvidia_provider_preserves_http_error_status(status, expected):
     assert "catalog detail" in str(error.value)
 
 
+def test_nvidia_account_entitlement_error_is_actionable():
+    settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
+    provider = NVIDIAProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(404, json={"detail": "Function 'function-id': Not found for account 'account-id'"})
+        )),
+    )
+    with pytest.raises(ProviderError, match="account-scoped 404") as error:
+        provider.generate(request())
+    assert "nvidia/nemotron-3-super-120b-a12b" in str(error.value)
+    assert "account-id" not in str(error.value)
+    assert "function-id" not in str(error.value)
+    assert "test-key" not in str(error.value)
+
+
+def test_nvidia_generic_404_includes_model_and_handles_plain_text_safely():
+    settings = ProviderSettings(provider="nvidia", model="nvidia/test-model", api_key="test-key", base_url="https://example.test/v1")
+    provider = NVIDIAProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(404, text="route missing; Bearer test-key; account account-id")
+        )),
+    )
+    with pytest.raises(ProviderError, match="model 'nvidia/test-model' or endpoint was not found") as error:
+        provider.generate(request())
+    assert "test-key" not in str(error.value)
+    assert "account-id" not in str(error.value)
+
+
 def test_nvidia_provider_maps_malformed_response():
     settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
     malformed = NVIDIAProvider(settings, httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"choices": []}))))
@@ -61,6 +93,51 @@ def test_nvidia_selection_and_missing_key(monkeypatch):
     assert isinstance(get_provider(settings), NVIDIAProvider)
     with pytest.raises(ProviderError, match="NVIDIA_API_KEY"):
         get_provider(settings).generate(request())
+
+
+def test_provider_settings_load_selected_nvidia_values(monkeypatch):
+    monkeypatch.setenv("CONTEXT_HUB_PROVIDER", " NVIDIA ")
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvidia-test-key")
+    monkeypatch.setenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    monkeypatch.setenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
+    monkeypatch.setenv("NEBIUS_API_KEY", "nebius-must-not-be-used")
+    settings = ProviderSettings.from_env()
+    assert settings.provider == "nvidia"
+    assert settings.api_key == "nvidia-test-key"
+    assert settings.base_url == "https://integrate.api.nvidia.com/v1"
+    assert settings.model == "nvidia/nemotron-3.5-super-vl-120b-a12b"
+    assert isinstance(get_provider(settings), NVIDIAProvider)
+
+
+def test_nebius_selection_remains_explicit(monkeypatch):
+    monkeypatch.setenv("CONTEXT_HUB_PROVIDER", "nebius")
+    monkeypatch.setenv("NEBIUS_API_KEY", "nebius-test-key")
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvidia-must-not-be-used")
+    settings = ProviderSettings.from_env()
+    assert settings.provider == "nebius"
+    assert get_provider(settings).__class__.__name__ == "NebiusProvider"
+
+
+def test_provider_status_uses_selected_provider_without_network(monkeypatch):
+    monkeypatch.setenv("CONTEXT_HUB_PROVIDER", "nvidia")
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvidia-test-key")
+    monkeypatch.setenv("NVIDIA_MODEL", "nvidia/test-model")
+    result = CliRunner().invoke(app, ["provider", "status"])
+    assert result.exit_code == 0
+    assert "Provider: Nvidia" in result.stdout
+    assert "Model: nvidia/test-model" in result.stdout
+    assert "API key: configured" in result.stdout
+    assert "nvidia-test-key" not in result.stdout
+
+
+def test_analyze_explicit_nvidia_missing_key_does_not_fall_back(monkeypatch):
+    monkeypatch.setenv("CONTEXT_HUB_PROVIDER", "nvidia")
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.setenv("NEBIUS_API_KEY", "nebius-must-not-be-used")
+    result = CliRunner().invoke(app, ["analyze", "Explain the architecture"])
+    assert result.exit_code == 1
+    assert "NVIDIA API key is not configured" in result.stdout
+    assert "NEBIUS" not in result.stdout
 
 
 def test_task_analysis_accepts_fenced_and_surrounded_json(tmp_path: Path):
