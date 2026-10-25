@@ -47,7 +47,7 @@ class BenchmarkDataset(BaseModel):
     @classmethod
     def unique_ids(cls, value: list[BenchmarkTask]) -> list[BenchmarkTask]:
         ids = [task.id for task in value]
-        if len(value) < 20 and len(set(ids)) != len(ids):
+        if len(set(ids)) != len(ids):
             raise ValueError("task IDs must be unique")
         if len(value) < 20:
             raise ValueError("benchmark requires at least 20 tasks")

@@ -28,6 +28,12 @@ def test_duplicate_ids_are_rejected():
         BenchmarkDataset.model_validate(data)
 
 
+def test_duplicate_ids_are_rejected_in_full_sized_dataset():
+    task = {"id": "rh-001", "query": "valid question", "expected": [{"path": "a.py"}], "rationale": "enough rationale"}
+    with pytest.raises(ValidationError, match="unique"):
+        BenchmarkDataset.model_validate({"version": "1.0", "name": "test", "tasks": [task] * 20})
+
+
 @pytest.mark.parametrize("change", [
     {"id": "bad", "query": "query", "expected": [{"path": "a.py"}], "rationale": "rationale"},
     {"id": "rh-001", "query": "query", "expected": [{"path": "../secret.py"}], "rationale": "rationale"},
@@ -40,7 +46,7 @@ def test_malformed_entries_are_rejected(change):
 
 
 def test_custom_json_dataset_can_be_loaded(tmp_path: Path):
-    source = {"version": "1.0", "name": "custom", "tasks": [{"id": "rh-001", "query": "a valid query", "expected": [{"path": "a.py"}], "rationale": "a valid rationale"}] * 20}
+    source = {"version": "1.0", "name": "custom", "tasks": [{"id": f"rh-{index:03d}", "query": "a valid query", "expected": [{"path": "a.py"}], "rationale": "a valid rationale"} for index in range(1, 21)]}
     path = tmp_path / "benchmark.json"
     path.write_text(json.dumps(source), encoding="utf-8")
     assert load_dataset(path).name == "custom"
