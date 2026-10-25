@@ -111,6 +111,7 @@ set CONTEXT_HUB_PROVIDER=nvidia
 set NVIDIA_API_KEY=<set-outside-the-repository>
 set NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 set NVIDIA_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b
+set NVIDIA_REASONING_EFFORT=none
 uv run ctx provider status
 uv run ctx analyze "Explain the project architecture, identify the main modules, and trace how data flows between them."
 ```
@@ -130,6 +131,12 @@ model namespace such as `nvidia/`; `429` means rate or
 quota limiting, and `5xx` indicates an upstream NVIDIA failure. Check
 `NVIDIA_BASE_URL` and `NVIDIA_MODEL` for `404`; check account access for
 account-scoped 404s.
+
+For Nemotron models that support NVIDIA's documented reasoning control,
+`NVIDIA_REASONING_EFFORT=none` disables hidden reasoning tokens so task
+analysis receives a user-facing final answer. Use `low` or `high` only when
+the model needs reasoning and `CONTEXT_HUB_MAX_TOKENS` leaves enough room for
+final content.
 
 ## MCP and evaluation
 

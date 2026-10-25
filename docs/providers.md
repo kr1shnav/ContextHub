@@ -42,6 +42,7 @@ $env:CONTEXT_HUB_PROVIDER = "nvidia"
 $env:NVIDIA_API_KEY = "your-nvidia-api-key"
 $env:NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 $env:NVIDIA_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+$env:NVIDIA_REASONING_EFFORT = "none"
 uv run ctx provider status
 uv run ctx analyze "Explain the project architecture, identify the main modules, and trace how data flows between them."
 ```
@@ -51,6 +52,11 @@ endpoint, and only whether the selected provider's key is configured. If the
 key is missing, analysis stops with an NVIDIA-specific diagnostic and makes no
 request. Nebius remains available by setting `CONTEXT_HUB_PROVIDER=nebius`,
 `NEBIUS_API_KEY`, and optionally `NEBIUS_BASE_URL` and `NEBIUS_MODEL`.
+
+For Nemotron models that support NVIDIA's documented reasoning control,
+`NVIDIA_REASONING_EFFORT=none` disables hidden reasoning tokens and leaves the
+output budget for user-facing task-analysis JSON. `low` and `high` are also
+available; increase `CONTEXT_HUB_MAX_TOKENS` when using reasoning modes.
 
 If NVIDIA returns `Function ... Not found for account`, the endpoint is
 reachable, but the account-scoped 404 may reflect model availability,

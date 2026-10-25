@@ -33,6 +33,7 @@ def test_nvidia_provider_uses_catalog_endpoint_and_bearer_key():
     body = json.loads(seen["model"])
     assert body["model"] == "nvidia/nemotron-3-super-120b-a12b"
     assert body["response_format"] == {"type": "json_object"}
+    assert body["reasoning_effort"] == "none"
 
 
 def test_nvidia_completion_path_is_appended_once():
@@ -207,12 +208,14 @@ def test_provider_settings_load_selected_nvidia_values(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "nvidia-test-key")
     monkeypatch.setenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
     monkeypatch.setenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
+    monkeypatch.setenv("NVIDIA_REASONING_EFFORT", "low")
     monkeypatch.setenv("NEBIUS_API_KEY", "nebius-must-not-be-used")
     settings = ProviderSettings.from_env()
     assert settings.provider == "nvidia"
     assert settings.api_key == "nvidia-test-key"
     assert settings.base_url == "https://integrate.api.nvidia.com/v1"
     assert settings.model == "nvidia/nemotron-3.5-super-vl-120b-a12b"
+    assert settings.reasoning_effort == "low"
     assert isinstance(get_provider(settings), NVIDIAProvider)
 
 

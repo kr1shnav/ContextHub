@@ -31,6 +31,8 @@ class NVIDIAProvider(LLMProvider):
             "stream": False,
             "response_format": {"type": "json_object"},
         }
+        if self.settings.reasoning_effort:
+            payload["reasoning_effort"] = self.settings.reasoning_effort
         headers = {"Authorization": f"Bearer {self.settings.api_key}", "Accept": "application/json", "Content-Type": "application/json"}
         client = self.client or httpx.Client(timeout=self.settings.timeout)
         try:
