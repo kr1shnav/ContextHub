@@ -3,7 +3,7 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from context_hub.providers import NVIDIAProvider, ProviderError, get_provider
+from context_hub.providers import NVIDIAProvider, NebiusProvider, ProviderError, get_provider
 from context_hub.providers.config import ProviderSettings
 from context_hub.providers.models import GenerationRequest
 from context_hub.analysis import analyze_task
@@ -97,11 +97,100 @@ def test_nvidia_generic_404_includes_model_and_handles_plain_text_safely():
     assert "account-id" not in str(error.value)
 
 
-def test_nvidia_provider_maps_malformed_response():
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (httpx.Response(200, text="<html>gateway error</html>", headers={"content-type": "text/html"}), "invalid JSON"),
+        (httpx.Response(200, json=[]), "expected an object"),
+        (httpx.Response(200, json={"choices": []}), "missing a non-empty 'choices'"),
+        (httpx.Response(200, json={"choices": [{}]}), r"missing 'choices\[0\].message'"),
+        (httpx.Response(200, json={"choices": [{"message": {}}]}), r"'choices\[0\]\.message\.content' is missing"),
+        (httpx.Response(200, json={"choices": [{"message": {"content": ""}}]}), r"'choices\[0\]\.message\.content' is empty or invalid"),
+    ],
+)
+def test_nvidia_provider_reports_response_shape_errors(response, expected):
     settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
-    malformed = NVIDIAProvider(settings, httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"choices": []}))))
-    with pytest.raises(ProviderError, match="invalid response"):
+    malformed = NVIDIAProvider(settings, httpx.Client(transport=httpx.MockTransport(lambda request: response)))
+    with pytest.raises(ProviderError, match=expected):
         malformed.generate(request())
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ({"content": "", "reasoning_content": "private reasoning"}, "will not substitute private reasoning"),
+        ({"content": "", "tool_calls": [{"id": "call-1"}]}, "does not support tool-call execution"),
+        ({"content": "", "refusal": "not allowed"}, "refused the task-analysis request"),
+    ],
+)
+def test_nvidia_provider_reports_non_text_completion_modes(message, expected):
+    settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
+    provider = NVIDIAProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"choices": [{"message": message, "finish_reason": "stop"}]})
+        )),
+    )
+    with pytest.raises(ProviderError, match=expected):
+        provider.generate(request())
+
+
+def test_nvidia_provider_reports_length_limited_empty_completion():
+    settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
+    provider = NVIDIAProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"choices": [{"message": {"content": ""}, "finish_reason": "length"}]})
+        )),
+    )
+    with pytest.raises(ProviderError, match="finish_reason='length'"):
+        provider.generate(request())
+
+
+def test_nvidia_provider_accepts_structured_text_content():
+    settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
+    provider = NVIDIAProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"choices": [{"message": {"content": [{"type": "text", "text": "{"}, {"type": "text", "text": "}"}]}}]})
+        )),
+    )
+    assert provider.generate(request()).text == "{}"
+
+
+def test_nvidia_provider_accepts_openai_compatible_success_response():
+    settings = ProviderSettings(provider="nvidia", api_key="test-key", base_url="https://example.test/v1")
+    provider = NVIDIAProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={
+                "id": "completion-id",
+                "model": "nvidia/test-model",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "{}"}, "finish_reason": "stop"}],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                    "prompt_tokens_details": {"cached_tokens": 0},
+                    "completion_tokens_details": {"reasoning_tokens": 3},
+                    "provider_specific": {"accounting_version": "v1"},
+                },
+            })
+        )),
+    )
+    response = provider.generate(request())
+    assert response.text == "{}"
+    assert response.finish_reason == "stop"
+    assert response.usage["prompt_tokens"] == 1
+    assert response.usage["prompt_tokens_details"] == {"cached_tokens": 0}
+
+
+def test_generation_response_allows_missing_usage_and_rejects_bad_token_counts():
+    from context_hub.providers.models import GenerationResponse
+
+    assert GenerationResponse(text="{}", model="test", provider="NVIDIA").usage is None
+    with pytest.raises(ValueError, match="usage.prompt_tokens must be an integer"):
+        GenerationResponse(text="{}", model="test", provider="NVIDIA", usage={"prompt_tokens": "1"})
 
 
 def test_nvidia_selection_and_missing_key(monkeypatch):
@@ -133,7 +222,18 @@ def test_nebius_selection_remains_explicit(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "nvidia-must-not-be-used")
     settings = ProviderSettings.from_env()
     assert settings.provider == "nebius"
-    assert get_provider(settings).__class__.__name__ == "NebiusProvider"
+    assert isinstance(get_provider(settings), NebiusProvider)
+
+
+def test_nebius_openai_compatible_success_remains_supported():
+    settings = ProviderSettings(provider="nebius", api_key="test-key", base_url="https://example.test/v1")
+    provider = NebiusProvider(
+        settings,
+        httpx.Client(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"model": "test-model", "choices": [{"message": {"content": "{}"}}]})
+        )),
+    )
+    assert provider.generate(request()).text == "{}"
 
 
 def test_provider_status_uses_selected_provider_without_network(monkeypatch):
@@ -176,6 +276,36 @@ def test_task_analysis_accepts_null_optional_lists(tmp_path: Path):
             return GenerationResponse(text='{"task_type":"task","domains":null,"confidence":0.5,"reasoning":"valid"}', model="test", provider="test")
 
     assert analyze_task("Explain this", Provider(), tmp_path).domains == []
+
+
+def test_task_analysis_ignores_provider_usage_metadata_but_keeps_strict_fields(tmp_path: Path):
+    class Provider:
+        def generate(self, request):
+            return GenerationResponse(
+                text='{"task_type":"explanation","confidence":0.8,"reasoning":"valid",'
+                     '"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,'
+                     '"prompt_tokens_details":{"cached_tokens":2},'
+                     '"completion_tokens_details":{"reasoning_tokens":3},'
+                     '"provider_field":{"value":"ignored"}}}',
+                model="test", provider="NVIDIA",
+                usage={"prompt_tokens": 10, "prompt_tokens_details": {"cached_tokens": 2}},
+            )
+
+    result = analyze_task("Explain this", Provider(), tmp_path)
+    assert result.task_type == "explanation"
+
+
+def test_task_analysis_rejects_wrong_required_field_type_with_usage_metadata(tmp_path: Path):
+    class Provider:
+        def generate(self, request):
+            return GenerationResponse(
+                text='{"task_type":"explanation","confidence":"high","reasoning":"invalid",'
+                     '"usage":{"prompt_tokens":10,"prompt_tokens_details":{"cached_tokens":2}}}',
+                model="test", provider="NVIDIA",
+            )
+
+    with pytest.raises(ProviderError, match="confidence"):
+        analyze_task("Explain this", Provider(), tmp_path)
 
 
 def test_task_analysis_retries_malformed_output_once(tmp_path: Path):

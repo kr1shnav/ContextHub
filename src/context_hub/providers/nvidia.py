@@ -64,15 +64,9 @@ class NVIDIAProvider(LLMProvider):
                             raise ProviderError(self._error_message(response, "NVIDIA API Catalog returned an upstream server error."))
                         continue
                     response.raise_for_status()
-                    data = response.json()
-                    choices = data.get("choices") if isinstance(data, dict) else None
-                    if not isinstance(choices, list) or not choices:
-                        raise ValueError("response choices are missing")
-                    choice = choices[0]
-                    content = choice["message"]["content"]
-                    if not isinstance(content, str):
-                        raise ValueError("response content is not text")
-                    return GenerationResponse(text=content, model=data.get("model", payload["model"]), provider=self.name, usage=data.get("usage"), finish_reason=choice.get("finish_reason"))
+                    data = self._decode_success(response)
+                    content, finish_reason = self._extract_content(data)
+                    return GenerationResponse(text=content, model=data.get("model", payload["model"]), provider=self.name, usage=data.get("usage"), finish_reason=finish_reason)
                 except httpx.TimeoutException as exc:
                     if attempt >= self.settings.retries:
                         raise ProviderError("NVIDIA request timed out.") from exc
@@ -81,12 +75,73 @@ class NVIDIAProvider(LLMProvider):
                         raise ProviderError("Unable to reach NVIDIA API Catalog.") from exc
         except ProviderError:
             raise
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ProviderError("NVIDIA returned an invalid response.") from exc
         finally:
             if self.client is None:
                 client.close()
         raise ProviderError("NVIDIA request failed.")
+
+    @classmethod
+    def _decode_success(cls, response: httpx.Response) -> dict[str, object]:
+        """Decode an OpenAI-compatible success body with actionable diagnostics."""
+        try:
+            data = response.json()
+        except (ValueError, json.JSONDecodeError) as exc:
+            content_type = response.headers.get("content-type", "unknown")
+            raise ProviderError(
+                f"NVIDIA returned invalid JSON for a successful response "
+                f"(content-type: {content_type}). Check the configured endpoint '{response.url}'."
+            ) from exc
+        if not isinstance(data, dict):
+            raise ProviderError(f"NVIDIA returned JSON of type {type(data).__name__}; expected an object with 'choices'.")
+        return data
+
+    @staticmethod
+    def _extract_content(data: dict[str, object]) -> tuple[str, str | None]:
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise ProviderError("NVIDIA response is missing a non-empty 'choices' array.")
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise ProviderError("NVIDIA response 'choices[0]' is not an object.")
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise ProviderError("NVIDIA response is missing 'choices[0].message'.")
+        finish_reason = choice.get("finish_reason")
+        finish_reason = finish_reason if isinstance(finish_reason, str) else None
+        if "content" not in message:
+            raise NVIDIAProvider._content_diagnostic(message, finish_reason, "missing")
+        content = message["content"]
+        if isinstance(content, str):
+            if content.strip():
+                return content, finish_reason
+        elif isinstance(content, list):
+            text_parts: list[str] = []
+            unsupported_parts: list[str] = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str):
+                    text_parts.append(part["text"])
+                elif isinstance(part, dict):
+                    unsupported_parts.append(str(part.get("type", "unknown")))
+                else:
+                    unsupported_parts.append(type(part).__name__)
+            combined = "".join(text_parts)
+            if combined.strip() and not unsupported_parts:
+                return combined, finish_reason
+            if unsupported_parts:
+                raise ProviderError(f"NVIDIA response contains unsupported message content parts: {', '.join(unsupported_parts[:5])}.")
+        raise NVIDIAProvider._content_diagnostic(message, finish_reason, "empty or invalid")
+
+    @staticmethod
+    def _content_diagnostic(message: dict[str, object], finish_reason: str | None, state: str) -> ProviderError:
+        if message.get("tool_calls"):
+            return ProviderError("NVIDIA response contains tool_calls, but ContextHub does not support tool-call execution for task analysis.")
+        if message.get("refusal"):
+            return ProviderError("NVIDIA refused the task-analysis request; no user-facing analysis content was returned.")
+        if message.get("reasoning_content"):
+            return ProviderError("NVIDIA returned reasoning_content without user-facing content; ContextHub will not substitute private reasoning for the answer.")
+        if finish_reason == "length":
+            return ProviderError("NVIDIA returned no user-facing content because the response ended with finish_reason='length'; increase the output token limit or simplify the task.")
+        return ProviderError(f"NVIDIA response 'choices[0].message.content' is {state}; finish_reason={finish_reason or 'unknown'}.")
 
     def _completion_url(self) -> str:
         """Return the OpenAI-compatible completion URL exactly once."""

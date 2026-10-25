@@ -24,6 +24,7 @@ def analyze_task(task: str, provider: LLMProvider, root: Path, settings: Provide
         try:
             response = provider.generate(request)
             data = _parse_task_analysis_json(response.text)
+            _discard_provider_usage_metadata(data)
             _normalize_optional_fields(data)
             data["task"] = task
             return TaskAnalysis.model_validate(data)
@@ -40,6 +41,12 @@ def _normalize_optional_fields(data: dict[str, object]) -> None:
     for field in ("domains", "keywords", "likely_files", "likely_symbols", "required_context", "ambiguities", "constraints"):
         if data.get(field) is None:
             data[field] = []
+
+
+def _discard_provider_usage_metadata(data: dict[str, object]) -> None:
+    """Keep provider accounting outside the strict task-analysis schema boundary."""
+    data.pop("usage", None)
+    data.pop("metadata", None)
 
 
 def _parse_task_analysis_json(text: str) -> dict[str, object]:
