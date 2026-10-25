@@ -110,19 +110,23 @@ for the API account:
 set CONTEXT_HUB_PROVIDER=nvidia
 set NVIDIA_API_KEY=<set-outside-the-repository>
 set NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-set NVIDIA_MODEL=<exact-enabled-model-id>
+set NVIDIA_MODEL=nvidia/nemotron-3.5-super-vl-120b-a12b
 uv run ctx provider status
 uv run ctx analyze "Explain the project architecture, identify the main modules, and trace how data flows between them."
 ```
 
-`NVIDIA_MODEL` is intentionally configurable; a model listed in a public
-catalog is not necessarily enabled for every account. Use NVIDIA's account/model
-catalog or dashboard to identify an enabled hosted model, then set its exact ID.
+The NVIDIA hosted route is `https://integrate.api.nvidia.com/v1/chat/completions`.
+The documented Nemotron VL model ID is
+`nvidia/nemotron-3.5-super-vl-120b-a12b`; the `nvidia/` namespace is part of the
+ID. `NVIDIA_MODEL` remains configurable because a catalog listing is not
+necessarily enabled for every account. Use NVIDIA's account/model catalog or
+dashboard to identify an enabled hosted model, then set its exact ID.
 `ctx provider status` is local-only and never prints the key.
 
 NVIDIA errors are reported without falling back to Nebius: `401` means the key
 is invalid, `403` means access is denied, `404` may indicate an unavailable
-model, account entitlement, or endpoint/model mismatch, `429` means rate or
+model, account entitlement, or endpoint/model mismatch, including a missing
+model namespace such as `nvidia/`; `429` means rate or
 quota limiting, and `5xx` indicates an upstream NVIDIA failure. Check
 `NVIDIA_BASE_URL` and `NVIDIA_MODEL` for `404`; check account access for
 account-scoped 404s.

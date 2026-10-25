@@ -1,4 +1,5 @@
 import httpx
+import json
 import pytest
 from typer.testing import CliRunner
 
@@ -29,6 +30,23 @@ def test_nvidia_provider_uses_catalog_endpoint_and_bearer_key():
     assert seen["url"] == "https://integrate.api.nvidia.com/v1/chat/completions"
     assert seen["auth"] == "Bearer test-key"
     assert "test-key" not in seen["model"]
+    body = json.loads(seen["model"])
+    assert body["model"] == "nvidia/nemotron-3-super-120b-a12b"
+    assert body["response_format"] == {"type": "json_object"}
+
+
+def test_nvidia_completion_path_is_appended_once():
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    for base_url in ("https://integrate.api.nvidia.com/v1", "https://integrate.api.nvidia.com/v1/", "https://integrate.api.nvidia.com/v1/chat/completions"):
+        settings = ProviderSettings(provider="nvidia", model="nvidia/test-model", api_key="test-key", base_url=base_url)
+        NVIDIAProvider(settings, httpx.Client(transport=httpx.MockTransport(handler))).generate(request())
+
+    assert seen == ["https://integrate.api.nvidia.com/v1/chat/completions"] * 3
 
 
 @pytest.mark.parametrize(

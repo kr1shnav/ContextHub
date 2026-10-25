@@ -36,7 +36,7 @@ class NVIDIAProvider(LLMProvider):
         try:
             for attempt in range(self.settings.retries + 1):
                 try:
-                    response = client.post(self.settings.base_url.rstrip("/") + "/chat/completions", headers=headers, json=payload)
+                    response = client.post(self._completion_url(), headers=headers, json=payload)
                     if response.status_code in (429, 500, 502, 503, 504) and attempt < self.settings.retries:
                         time.sleep(0.25 * (2 ** attempt))
                         continue
@@ -56,7 +56,7 @@ class NVIDIAProvider(LLMProvider):
                                     "and check the model is enabled for the account.",
                                 )
                             )
-                        raise ProviderError(self._error_message(response, f"model '{payload['model']}' or endpoint was not found. Check NVIDIA_MODEL and NVIDIA_BASE_URL."))
+                        raise ProviderError(self._error_message(response, f"model '{payload['model']}' or endpoint was not found at '{self._completion_url()}'. Check NVIDIA_MODEL and NVIDIA_BASE_URL. NVIDIA hosted model IDs must match the catalog exactly, including any provider namespace such as 'nvidia/'."))
                     if response.status_code == 429:
                         raise ProviderError(self._error_message(response, "rate limit or quota reached. Try again later."))
                     if 500 <= response.status_code <= 599:
@@ -87,6 +87,12 @@ class NVIDIAProvider(LLMProvider):
             if self.client is None:
                 client.close()
         raise ProviderError("NVIDIA request failed.")
+
+    def _completion_url(self) -> str:
+        """Return the OpenAI-compatible completion URL exactly once."""
+        base = self.settings.base_url.rstrip("/")
+        suffix = "/chat/completions"
+        return base if base.endswith(suffix) else base + suffix
 
     @staticmethod
     def _error_message(response: httpx.Response, fallback: str) -> str:
